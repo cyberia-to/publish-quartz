@@ -53,7 +53,7 @@ pub fn process_favorites(
         // Create favorite embed file (use slugified name for URL-safe paths)
         let fav_path = favorites_output.join(format!("{}.md", slug));
         let fav_content = format!(
-            "---\ntitle: \"{}{}\"\n---\n\n![[pages/{}]]\n",
+            "---\ntitle: \"{}{}\"\n---\n\n![[{}]]\n",
             if icon.is_empty() { String::new() } else { format!("{} ", icon) },
             fav,
             page_filename

@@ -5,16 +5,27 @@ use crate::page::PageIndex;
 use crate::query;
 
 lazy_static! {
-    // Inline properties to remove
-    static ref INLINE_PROPS_RE: Regex = Regex::new(
+    // Logseq system properties to remove completely (not user data)
+    static ref SYSTEM_PROPS_RE: Regex = Regex::new(
         r"(?m)^(\s*)(?:-\s*)?(collapsed|logseq\.order-list-type|id|query-table|query-sort-by|query-sort-desc|query-properties):: .+$"
     ).unwrap();
+
+    // User inline properties to convert to readable format (key:: value → **Key:** value)
+    static ref USER_PROPS_RE: Regex = Regex::new(
+        r"(?m)^(\s*)(?:-\s*)?([\w-]+):: (.+)$"
+    ).unwrap();
+
+    // Logseq image size attributes {:height N, :width N}
+    static ref IMAGE_SIZE_RE: Regex = Regex::new(r"\{:height\s+\d+,?\s*:width\s+\d+\}").unwrap();
+
+    // Empty bullet lines (just "- " or "-" with optional whitespace)
+    static ref EMPTY_BULLET_RE: Regex = Regex::new(r"(?m)^(\s*)-\s*$").unwrap();
 
     // Wikilinks with $ signs
     static ref WIKILINK_DOLLAR_RE: Regex = Regex::new(r"\[\[([^\]]*\$[^\]]*)\]\]").unwrap();
 
-    // Standalone $ tokens (simplified - matches $TOKEN patterns)
-    static ref DOLLAR_TOKEN_RE: Regex = Regex::new(r"\$([A-Z][A-Z0-9]*)").unwrap();
+    // Standalone $ tokens (matches $TOKEN patterns)
+    static ref DOLLAR_TOKEN_RE: Regex = Regex::new(r"(^|[^\\])\$([A-Z][A-Z0-9]*)").unwrap();
 
     // Embed syntax
     static ref EMBED_RE: Regex = Regex::new(r"\{\{embed\s+\[\[([^\]]+)\]\]\s*\}\}").unwrap();
@@ -39,8 +50,14 @@ lazy_static! {
     // Cloze
     static ref CLOZE_RE: Regex = Regex::new(r"\{\{cloze\s+([^\}]+)\}\}").unwrap();
 
-    // Hiccup/EDN syntax (Clojure-style [:tag ...] blocks)
-    static ref HICCUP_RE: Regex = Regex::new(r"(?s)\[:[\w.-]+(?:\s+\{[^}]*\})?\s+(?:\[[\s\S]*?\])+\]").unwrap();
+    // Hiccup/EDN syntax (Clojure-style [:tag ...] blocks) - matches balanced brackets
+    static ref HICCUP_LINE_RE: Regex = Regex::new(r"(?m)^(\s*-\s*)?\[:\w").unwrap();
+
+    // Extract text content from hiccup
+    static ref HICCUP_TEXT_RE: Regex = Regex::new(r#""([^"]+)""#).unwrap();
+    static ref HICCUP_H2_RE: Regex = Regex::new(r#"\[:h2\s+"([^"]+)"\]"#).unwrap();
+    static ref HICCUP_H3_RE: Regex = Regex::new(r#"\[:h3\s+"([^"]+)"\]"#).unwrap();
+    static ref HICCUP_LI_RE: Regex = Regex::new(r#"\[:li\s+"([^"]+)"\]"#).unwrap();
 
     // Task markers
     static ref DONE_RE: Regex = Regex::new(r"(?m)^(\s*)-\s+DONE\s+").unwrap();
@@ -71,8 +88,36 @@ lazy_static! {
 pub fn transform(content: &str, page_index: &PageIndex) -> String {
     let mut result = content.to_string();
 
-    // Remove inline properties
-    result = INLINE_PROPS_RE.replace_all(&result, "").to_string();
+    // Remove system properties (not user data)
+    result = SYSTEM_PROPS_RE.replace_all(&result, "").to_string();
+
+    // Convert user inline properties to readable format: key:: value → - **Key:** value
+    result = USER_PROPS_RE
+        .replace_all(&result, |caps: &Captures| {
+            let indent = &caps[1];
+            let key = &caps[2];
+            let value = &caps[3];
+            // Convert key-with-dashes to Title Case
+            let formatted_key: String = key
+                .split('-')
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        Some(first) => first.to_uppercase().chain(chars).collect(),
+                        None => String::new(),
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            format!("{}- **{}:** {}", indent, formatted_key, value)
+        })
+        .to_string();
+
+    // Strip Logseq image size attributes
+    result = IMAGE_SIZE_RE.replace_all(&result, "").to_string();
+
+    // Remove empty bullet lines
+    result = EMPTY_BULLET_RE.replace_all(&result, "").to_string();
 
     // Fix tables - remove list marker from first cell
     result = TABLE_FIRST_CELL_RE.replace_all(&result, "|").to_string();
@@ -85,33 +130,33 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
         })
         .to_string();
 
-    // Escape standalone $ tokens
+    // Escape standalone $ tokens (preserve char before $, skip if already escaped)
     result = DOLLAR_TOKEN_RE
-        .replace_all(&result, |caps: &Captures| format!("\\${}", &caps[1]))
+        .replace_all(&result, |caps: &Captures| {
+            let prefix = &caps[1]; // char before $ or empty at start
+            let token = &caps[2];  // the TOKEN part
+            format!("{}\\${}", prefix, token)
+        })
         .to_string();
 
     // Convert embeds
     result = EMBED_RE.replace_all(&result, "![[$1]]").to_string();
 
-    // Add pages/ prefix to wikilinks
+    // Process wikilinks - remove pages/ prefix if present (pages are now at content root)
     result = WIKILINK_RE
         .replace_all(&result, |caps: &Captures| {
             let embed = caps.get(1).map_or("", |m| m.as_str());
             let link = &caps[2];
             let alias = caps.get(3).map_or("", |m| m.as_str());
 
-            // Skip if already has pages/, journals/, favorites/, assets/ prefix or is special
-            if link.starts_with("pages/")
-                || link.starts_with("journals/")
-                || link.starts_with("favorites/")
-                || link.starts_with("assets/")
-                || link.starts_with("http")
-                || link.starts_with('#')
-            {
-                return format!("{}[[{}{}]]", embed, link, alias);
-            }
+            // Remove pages/ prefix since pages are now at content root
+            let clean_link = if link.starts_with("pages/") {
+                &link[6..] // Remove "pages/" prefix
+            } else {
+                link
+            };
 
-            format!("{}[[pages/{}{}]]", embed, link, alias)
+            format!("{}[[{}{}]]", embed, clean_link, alias)
         })
         .to_string();
 
@@ -151,12 +196,8 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Renderer placeholder
     result = RENDERER_RE.replace_all(&result, "`[renderer]`").to_string();
 
-    // Hiccup/EDN syntax - wrap in code block
-    result = HICCUP_RE
-        .replace_all(&result, |caps: &Captures| {
-            format!("```clojure\n{}\n```", &caps[0])
-        })
-        .to_string();
+    // Hiccup/EDN syntax - convert to markdown
+    result = convert_hiccup_to_markdown(&result);
 
     // Cloze to highlight
     result = CLOZE_RE.replace_all(&result, "==$1==").to_string();
@@ -184,4 +225,128 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
         .to_string();
 
     result
+}
+
+/// Convert Logseq hiccup syntax to markdown
+fn convert_hiccup_to_markdown(content: &str) -> String {
+    let mut result = String::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Check if line contains hiccup (starts with [: after optional list marker)
+        if trimmed.starts_with("[:") || trimmed.starts_with("- [:") {
+            let hiccup = if trimmed.starts_with("- ") {
+                &trimmed[2..]
+            } else {
+                trimmed
+            };
+
+            // Convert hiccup to markdown
+            let markdown = parse_hiccup_to_markdown(hiccup);
+            result.push_str(&markdown);
+            result.push('\n');
+        } else {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+
+    // Remove trailing newline if original didn't have one
+    if !content.ends_with('\n') && result.ends_with('\n') {
+        result.pop();
+    }
+
+    result
+}
+
+/// Parse hiccup structure and convert to markdown (preserving element order)
+fn parse_hiccup_to_markdown(hiccup: &str) -> String {
+    let mut markdown = String::new();
+
+    // Collect all elements with their positions
+    let mut elements: Vec<(usize, String)> = Vec::new();
+
+    // Find h2 headers with positions
+    for caps in HICCUP_H2_RE.captures_iter(hiccup) {
+        if let (Some(m), Some(text)) = (caps.get(0), caps.get(1)) {
+            elements.push((m.start(), format!("## {}\n", text.as_str())));
+        }
+    }
+
+    // Find h3 headers with positions
+    for caps in HICCUP_H3_RE.captures_iter(hiccup) {
+        if let (Some(m), Some(text)) = (caps.get(0), caps.get(1)) {
+            elements.push((m.start(), format!("### {}\n", text.as_str())));
+        }
+    }
+
+    // Find [:ul ...] blocks and extract their [:li ...] items
+    // We need to find each [:ul and its corresponding [:li items
+    let ul_starts: Vec<usize> = hiccup.match_indices("[:ul").map(|(i, _)| i).collect();
+
+    for ul_start in ul_starts {
+        // Find the extent of this [:ul block by counting brackets
+        let ul_slice = &hiccup[ul_start..];
+        let mut bracket_count = 0;
+        let mut ul_end = 0;
+
+        for (i, c) in ul_slice.char_indices() {
+            match c {
+                '[' => bracket_count += 1,
+                ']' => {
+                    bracket_count -= 1;
+                    if bracket_count == 0 {
+                        ul_end = i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if ul_end > 0 {
+            let ul_content = &ul_slice[..ul_end];
+            // Extract all [:li "..."] from this ul block
+            let mut list_md = String::new();
+            for caps in HICCUP_LI_RE.captures_iter(ul_content) {
+                if let Some(text) = caps.get(1) {
+                    list_md.push_str(&format!("- {}\n", text.as_str()));
+                }
+            }
+            if !list_md.is_empty() {
+                elements.push((ul_start, list_md));
+            }
+        }
+    }
+
+    // Sort by position to maintain order
+    elements.sort_by_key(|(pos, _)| *pos);
+
+    // Build markdown output
+    for (_, content) in elements {
+        markdown.push_str(&content);
+    }
+
+    // If we couldn't extract anything meaningful, show as info callout
+    if markdown.is_empty() {
+        // Extract any quoted strings as fallback
+        let mut texts: Vec<String> = Vec::new();
+        for caps in HICCUP_TEXT_RE.captures_iter(hiccup) {
+            if let Some(text) = caps.get(1) {
+                texts.push(text.as_str().to_string());
+            }
+        }
+
+        if !texts.is_empty() {
+            markdown.push_str("> [!info] Dynamic Content\n");
+            for text in texts {
+                markdown.push_str(&format!("> {}\n", text));
+            }
+        } else {
+            markdown.push_str("> [!note] Dynamic content - view in Logseq\n");
+        }
+    }
+
+    markdown
 }

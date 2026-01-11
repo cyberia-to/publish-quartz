@@ -135,6 +135,50 @@ mod path_tests {
             result
         );
     }
+
+    #[test]
+    fn test_hiccup_converts_to_markdown() {
+        let input = r#"- [:div [:h2 "brain state 📊"][:ul [:li "pages: 1,299"][:li "words: 33,951"]][:h3 "Text"][:ul [:li "Blocks: 4,809"]]]"#;
+        let result = content::transform(input, &empty_index());
+
+        // Should contain h2 header
+        assert!(
+            result.contains("## brain state 📊"),
+            "Should convert h2, got: {}",
+            result
+        );
+
+        // Should contain h3 header
+        assert!(
+            result.contains("### Text"),
+            "Should convert h3, got: {}",
+            result
+        );
+
+        // Should contain list items
+        assert!(
+            result.contains("- pages: 1,299"),
+            "Should convert list items, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_hiccup_simple_list() {
+        let input = "[:ul [:li \"item 1\"][:li \"item 2\"]]";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("- item 1"),
+            "Should convert list, got: {}",
+            result
+        );
+        assert!(
+            result.contains("- item 2"),
+            "Should convert list, got: {}",
+            result
+        );
+    }
 }
 
 #[cfg(test)]

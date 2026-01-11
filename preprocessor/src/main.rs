@@ -86,7 +86,8 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
     let mut stats = Stats::default();
 
     // Create output directories
-    let pages_output = config.output_dir.join("pages");
+    // Pages go to content root (not in pages/ subfolder) for cleaner URLs
+    let pages_output = config.output_dir.clone();
     let journals_output = config.output_dir.join("journals");
     let favorites_output = config.output_dir.join("favorites");
     let assets_output = config.output_dir.join("assets");
@@ -159,7 +160,7 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
         };
         let home_slug = home_page.to_lowercase().replace(' ', "-");
         let index_content = format!(
-            "---\ntitle: \"{}\"\n---\n\n![[pages/{}]]\n",
+            "---\ntitle: \"{}\"\n---\n\n![[{}]]\n",
             page_title, home_slug
         );
         fs::write(&index_path, index_content)?;

@@ -267,7 +267,7 @@ pub fn results_to_markdown(results: &[&Page], query_str: &str) -> String {
                 |t| t.clone(),
             );
             format!(
-                "- [[pages/{}|{}{}]]",
+                "- [[{}|{}{}]]",
                 p.name,
                 if icon.is_empty() { String::new() } else { format!("{} ", icon) },
                 title
