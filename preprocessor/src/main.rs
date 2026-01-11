@@ -149,11 +149,21 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
         println!("Created: {} favorite pages", stats.favorites_created);
     }
 
-    // Step 6: Create index.md
+    // Step 6: Write site config and create index.md
+    let site_config = favorites::write_site_config(&config_path, &config.output_dir);
     let index_path = config.output_dir.join("index.md");
     if !index_path.exists() {
-        fs::write(&index_path, "---\ntitle: \"Cyber\"\n---\n\n![[pages/cyber]]\n")?;
-        println!("\nCreated index.md");
+        let (home_page, page_title) = match &site_config {
+            Some(cfg) => (cfg.home_page.clone(), cfg.page_title.clone()),
+            None => ("index".to_string(), "Home".to_string()),
+        };
+        let home_slug = home_page.to_lowercase().replace(' ', "-");
+        let index_content = format!(
+            "---\ntitle: \"{}\"\n---\n\n![[pages/{}]]\n",
+            page_title, home_slug
+        );
+        fs::write(&index_path, index_content)?;
+        println!("\nCreated index.md (home: {}, title: {})", home_page, page_title);
     }
 
     // Step 7: Copy assets
