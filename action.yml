@@ -1,6 +1,10 @@
-name: 'Logseq to Quartz'
-description: 'Convert Logseq graph to Quartz static site'
-author: 'michaelborisov'
+name: 'Publish Quartz'
+description: 'Convert Logseq graph to a fast, static Quartz website. Generates individual HTML pages instead of SPA.'
+author: 'cyberia-to'
+
+branding:
+  icon: 'book-open'
+  color: 'green'
 
 inputs:
   graph-path:
