@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: user/publish-quartz
+          repository: cyberia-to/publish-quartz
           path: publish-quartz
 
       - uses: ./publish-quartz
@@ -68,7 +68,7 @@ Requirements: Rust, Node.js 22+
 
 ```bash
 # Clone this repo
-git clone https://github.com/user/publish-quartz.git
+git clone https://github.com/cyberia-to/publish-quartz.git
 cd publish-quartz
 
 # Build preprocessor

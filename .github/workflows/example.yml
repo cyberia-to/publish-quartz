@@ -28,7 +28,7 @@ jobs:
       - name: Checkout publish-quartz
         uses: actions/checkout@v4
         with:
-          repository: user/publish-quartz  # Change to actual repo
+          repository: cyberia-to/publish-quartz  # Change to actual repo
           path: publish-quartz
 
       - name: Build site
