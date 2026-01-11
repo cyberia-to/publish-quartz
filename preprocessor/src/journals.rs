@@ -149,7 +149,7 @@ fn process_journal_file(
     Ok(true)
 }
 
-/// Create journal index page
+/// Create journal index page with embedded content
 fn create_journal_index(output_dir: &Path, entries: &[(String, String, String)]) -> Result<()> {
     let mut sorted = entries.to_vec();
     sorted.sort_by(|a, b| b.0.cmp(&a.0)); // Sort by date descending
@@ -157,7 +157,9 @@ fn create_journal_index(output_dir: &Path, entries: &[(String, String, String)])
     let mut content = String::from("---\ntitle: \"📅 Journals\"\n---\n\n");
 
     for (date, title, _) in sorted {
+        // Add heading with link, then embed the journal content
         content.push_str(&format!("## [[journals/{}|{} - {}]]\n\n", date, date, title));
+        content.push_str(&format!("![[journals/{}]]\n\n---\n\n", date));
     }
 
     fs::write(output_dir.join("index.md"), content)?;
