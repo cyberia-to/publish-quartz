@@ -226,12 +226,20 @@ export function resolveRelative(
   // Check if current is a folder page (has child pages under it)
   // If so, use current/index for path calculation since it outputs to current/index.html
   let effectiveCurrent = current
-  if (allSlugs && !current.endsWith("/index")) {
-    const currentIsFolder = allSlugs.some(
-      (slug) => slug !== current && slug.startsWith(current + "/"),
-    )
-    if (currentIsFolder) {
-      effectiveCurrent = (current + "/index") as FullSlug
+  if (!current.endsWith("/index")) {
+    // Check with allSlugs if available
+    if (allSlugs) {
+      const currentIsFolder = allSlugs.some(
+        (slug) => slug !== current && slug.startsWith(current + "/"),
+      )
+      if (currentIsFolder) {
+        effectiveCurrent = (current + "/index") as FullSlug
+      }
+    } else {
+      // Without allSlugs, check if target is a child of current (indicates current is a folder)
+      if (simpleTarget.startsWith(simpleCurrent + "/")) {
+        effectiveCurrent = (current + "/index") as FullSlug
+      }
     }
   }
   const res = joinSegments(pathToRoot(effectiveCurrent), simplifySlug(target as FullSlug)) as RelativeURL
