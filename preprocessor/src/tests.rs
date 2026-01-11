@@ -256,6 +256,210 @@ mod favorites_tests {
             index_content
         );
     }
+
+    #[test]
+    fn test_favorites_with_dots_in_name() {
+        let temp = tempdir().unwrap();
+        let favorites_dir = temp.path().join("favorites");
+        let pages_dir = temp.path().join("pages");
+        fs::create_dir_all(&favorites_dir).unwrap();
+        fs::create_dir_all(&pages_dir).unwrap();
+
+        // Create a page with dot in name (like cv.land)
+        fs::write(
+            pages_dir.join("cv.land.md"),
+            "---\ntitle: CV Land\n---\nContent",
+        ).unwrap();
+
+        let config_content = r#"{:favorites ["cv.land"]}"#;
+        let config_path = temp.path().join("config.edn");
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1, "Should create 1 favorite");
+
+        // Check that favorite file was created with dot preserved in slug
+        assert!(favorites_dir.join("cv.land.md").exists(), "Favorite file should preserve dot");
+    }
+
+    #[test]
+    fn test_favorites_with_spaces_in_name() {
+        let temp = tempdir().unwrap();
+        let favorites_dir = temp.path().join("favorites");
+        let pages_dir = temp.path().join("pages");
+        fs::create_dir_all(&favorites_dir).unwrap();
+        fs::create_dir_all(&pages_dir).unwrap();
+
+        // Create a page with spaces (pages keep lowercase with spaces)
+        fs::write(
+            pages_dir.join("github projects.md"),
+            "---\ntitle: GitHub Projects\n---\nContent",
+        ).unwrap();
+
+        let config_content = r#"{:favorites ["github projects"]}"#;
+        let config_path = temp.path().join("config.edn");
+        fs::write(&config_path, config_content).unwrap();
+
+        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1, "Should create 1 favorite");
+
+        // Slug converts spaces to dashes
+        assert!(favorites_dir.join("github-projects.md").exists(), "Favorite file should use slugified name");
+    }
+
+    #[test]
+    fn test_get_default_home() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+
+        // Config with default-home
+        fs::write(&config_path, r#"
+{:meta/version 1
+ :default-home {:page "cyberia"}}
+"#).unwrap();
+
+        let result = crate::favorites::get_default_home(&config_path);
+        assert_eq!(result, Some("cyberia".to_string()));
+    }
+
+    #[test]
+    fn test_get_default_home_skips_comments() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+
+        // Config with commented default-home followed by real one
+        fs::write(&config_path, r#"
+{:meta/version 1
+ ;; :default-home {:page "commented"}
+ :default-home {:page "actual"}}
+"#).unwrap();
+
+        let result = crate::favorites::get_default_home(&config_path);
+        assert_eq!(result, Some("actual".to_string()), "Should skip commented lines");
+    }
+
+    #[test]
+    fn test_get_site_title_from_default_home() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+
+        // Config without :meta/title, should fall back to default-home
+        fs::write(&config_path, r#"
+{:default-home {:page "my site"}}
+"#).unwrap();
+
+        let result = crate::favorites::get_site_title(&config_path);
+        assert_eq!(result, Some("my site".to_string()));
+    }
+
+    #[test]
+    fn test_write_site_config() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        fs::write(&config_path, r#"{:default-home {:page "cyberia"}}"#).unwrap();
+
+        let result = crate::favorites::write_site_config(&config_path, &output_dir);
+        assert!(result.is_some());
+
+        let config = result.unwrap();
+        assert_eq!(config.page_title, "Cyberia"); // Capitalized
+        assert_eq!(config.home_page, "cyberia");
+
+        // Check JSON file was created
+        let json_path = output_dir.join("_site_config.json");
+        assert!(json_path.exists());
+
+        let json_content = fs::read_to_string(json_path).unwrap();
+        assert!(json_content.contains("Cyberia"));
+    }
+}
+
+#[cfg(test)]
+mod journals_tests {
+    use std::fs;
+    use tempfile::tempdir;
+    use crate::config::Config;
+
+    #[test]
+    fn test_journals_index_embeds_content() {
+        let temp = tempdir().unwrap();
+        let journals_dir = temp.path().join("journals");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&journals_dir).unwrap();
+        fs::create_dir_all(&output_dir).unwrap();
+
+        // Create a test journal
+        fs::write(
+            journals_dir.join("2025_01_15.md"),
+            "- Did some work today\n- Met with team",
+        ).unwrap();
+
+        let config = Config {
+            input_dir: temp.path().to_path_buf(),
+            output_dir: output_dir.clone(),
+            include_private: false,
+            create_stubs: false,
+            verbose: false,
+        };
+
+        let page_index = Vec::new();
+        let result = crate::journals::process_journals(&journals_dir, &output_dir, &page_index, &config);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 1);
+
+        // Check index.md has embed syntax
+        let index_content = fs::read_to_string(output_dir.join("index.md")).unwrap();
+        assert!(
+            index_content.contains("![[journals/2025-01-15]]"),
+            "Index should embed journal content, got: {}",
+            index_content
+        );
+        assert!(
+            index_content.contains("## [[journals/2025-01-15"),
+            "Index should have heading link, got: {}",
+            index_content
+        );
+    }
+
+    #[test]
+    fn test_journals_sorted_descending() {
+        let temp = tempdir().unwrap();
+        let journals_dir = temp.path().join("journals");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&journals_dir).unwrap();
+        fs::create_dir_all(&output_dir).unwrap();
+
+        // Create journals in random order
+        fs::write(journals_dir.join("2025_01_01.md"), "First").unwrap();
+        fs::write(journals_dir.join("2025_01_15.md"), "Middle").unwrap();
+        fs::write(journals_dir.join("2025_01_31.md"), "Last").unwrap();
+
+        let config = Config {
+            input_dir: temp.path().to_path_buf(),
+            output_dir: output_dir.clone(),
+            include_private: false,
+            create_stubs: false,
+            verbose: false,
+        };
+
+        let page_index = Vec::new();
+        crate::journals::process_journals(&journals_dir, &output_dir, &page_index, &config).unwrap();
+
+        let index_content = fs::read_to_string(output_dir.join("index.md")).unwrap();
+
+        // 2025-01-31 should appear before 2025-01-15 which should appear before 2025-01-01
+        let pos_31 = index_content.find("2025-01-31").unwrap();
+        let pos_15 = index_content.find("2025-01-15").unwrap();
+        let pos_01 = index_content.find("2025-01-01").unwrap();
+
+        assert!(pos_31 < pos_15, "Latest date should come first");
+        assert!(pos_15 < pos_01, "Dates should be in descending order");
+    }
 }
 
 #[cfg(test)]
