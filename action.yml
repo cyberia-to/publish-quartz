@@ -1,0 +1,84 @@
+name: 'Logseq to Quartz'
+description: 'Convert Logseq graph to Quartz static site'
+author: 'michaelborisov'
+
+inputs:
+  graph-path:
+    description: 'Path to Logseq graph (default: current directory)'
+    required: false
+    default: '.'
+  output-path:
+    description: 'Output directory for built site'
+    required: false
+    default: 'public'
+  quartz-version:
+    description: 'Quartz version to use'
+    required: false
+    default: 'v4'
+
+outputs:
+  output-path:
+    description: 'Path to the generated site'
+    value: ${{ inputs.output-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Setup Rust
+      uses: dtolnay/rust-action@stable
+
+    - name: Cache Rust dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/
+          ~/.cargo/git/
+          ${{ github.action_path }}/preprocessor/target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Clone Quartz
+      shell: bash
+      run: |
+        git clone --depth 1 https://github.com/jackyzha0/quartz.git quartz-build
+        cd quartz-build && npm ci
+
+    - name: Build preprocessor
+      shell: bash
+      run: |
+        cd ${{ github.action_path }}/preprocessor
+        cargo build --release
+
+    - name: Preprocess Logseq content
+      shell: bash
+      run: |
+        ${{ github.action_path }}/preprocessor/target/release/logseq-to-quartz \
+          --input ${{ inputs.graph-path }} \
+          --output quartz-build/content \
+          --create-stubs
+
+    - name: Copy theme customizations
+      shell: bash
+      run: |
+        THEME_DIR="${{ github.action_path }}/quartz-theme"
+        cp "$THEME_DIR/quartz.config.ts" quartz-build/
+        cp "$THEME_DIR/quartz.layout.ts" quartz-build/
+        cp "$THEME_DIR/styles/custom.scss" quartz-build/quartz/styles/
+        cp "$THEME_DIR/path.ts" quartz-build/quartz/util/
+        # Components
+        cp "$THEME_DIR/components/"*.tsx quartz-build/quartz/components/
+        cp "$THEME_DIR/components/components-index.ts" quartz-build/quartz/components/index.ts
+        # Scripts and styles
+        cp "$THEME_DIR/scripts/"*.ts quartz-build/quartz/components/scripts/
+        cp "$THEME_DIR/styles/"*.scss quartz-build/quartz/components/styles/
+
+    - name: Build Quartz site
+      shell: bash
+      run: |
+        cd quartz-build
+        npx quartz build -o ../${{ inputs.output-path }}

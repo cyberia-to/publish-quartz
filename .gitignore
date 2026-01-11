@@ -1,0 +1,11 @@
+# Build artifacts
+preprocessor/target/
+quartz-build/
+public/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
