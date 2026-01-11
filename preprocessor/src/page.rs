@@ -309,7 +309,8 @@ pub fn create_stubs(output_dir: &Path, page_index: &PageIndex) -> Result<usize> 
             }
         }
 
-        let title = link.replace('_', " ");
+        // Unescape dollar signs for YAML title (backslash escape is invalid in YAML)
+        let title = link.replace('_', " ").replace("\\$", "$");
         let stub_content = format!(
             "---\ntitle: \"{}\"\nstub: true\n---\n\n> [!note] Stub Page\n> This page was auto-generated.\n",
             title
