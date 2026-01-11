@@ -37,10 +37,12 @@ pub fn process_favorites(
 
     let mut count = 0;
     for fav in &favorites {
+        // Page files use lowercase names with spaces preserved
+        let page_filename = fav.to_lowercase();
         let slug = slugify(fav);
 
-        // Check if page exists
-        let page_path = pages_output.join(format!("{}.md", slug));
+        // Check if page exists (with original spacing)
+        let page_path = pages_output.join(format!("{}.md", page_filename));
         if !page_path.exists() {
             continue;
         }
@@ -48,13 +50,13 @@ pub fn process_favorites(
         // Get icon from page if exists
         let icon = get_page_icon(&page_path).unwrap_or_default();
 
-        // Create favorite embed file
+        // Create favorite embed file (use slugified name for URL-safe paths)
         let fav_path = favorites_output.join(format!("{}.md", slug));
         let fav_content = format!(
             "---\ntitle: \"{}{}\"\n---\n\n![[pages/{}]]\n",
             if icon.is_empty() { String::new() } else { format!("{} ", icon) },
             fav,
-            slug
+            page_filename
         );
 
         fs::write(&fav_path, fav_content)?;
@@ -91,13 +93,13 @@ fn extract_favorites(content: &str) -> Vec<String> {
     favorites
 }
 
-/// Convert page name to slug
+/// Convert page name to slug (matching page filename format)
 fn slugify(name: &str) -> String {
     name.to_lowercase()
         .replace(' ', "-")
         .replace('/', "-")
         .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_')
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
         .collect()
 }
 
