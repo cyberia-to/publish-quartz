@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 2025-01-13
+
+### Fixed
+- Namespace stub pages now create proper folder structure (`[[cyber/tokens]]` → `cyber/tokens.md`)
+
 ## [0.3.0] - 2025-01-13
 
 ### Added

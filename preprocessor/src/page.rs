@@ -317,8 +317,9 @@ pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize>
         }
 
         // Unescape dollar signs first (from \$ to $), then sanitize for filesystem
+        // Keep '/' for namespace folder structure, only replace invalid chars
         let unescaped_link = link.replace("\\$", "$");
-        let safe_link = unescaped_link.replace(['/', ':', '*', '?', '"', '<', '>', '|'], "_");
+        let safe_link = unescaped_link.replace([':', '*', '?', '"', '<', '>', '|', '\\'], "_");
 
         let stub_path = output_dir.join(format!("{}.md", safe_link));
         if stub_path.exists() {

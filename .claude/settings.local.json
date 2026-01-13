@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(./preprocessor/target/release/logseq-to-quartz:*)",
+      "Bash(make reprocess:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:docs.logseq.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(cargo run:*)",
+      "Bash(grep:*)",
+      "Bash(cargo test:*)",
+      "Bash(make build:*)",
+      "Bash(source ~/.nvm/nvm.sh)",
+      "Bash(nvm use:*)",
+      "Bash(make clean:*)",
+      "Bash(ls:*)",
+      "Bash(make check-node:*)",
+      "Bash(echo:*)",
+      "Bash(make:*)"
+    ]
+  }
+}

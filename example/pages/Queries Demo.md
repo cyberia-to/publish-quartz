@@ -75,6 +75,10 @@ tags:: queries, advanced, demo
 	  | scale | [[superintelligence]] | [[ai]] |
 	  | launch | Nov 2022 | Nov 2024 |
 	  | distribution | fair | fair |
+- ## Namespace Links
+	- Links with namespaces create proper folder structure:
+		- [[cyber/tokens]] - creates stub at cyber/tokens.md
+		- [[projects/archive]] - creates stub at projects/archive.md
 - ## Notes
 	- Queries are executed at build time by publish-quartz
 	- Results are rendered as markdown lists or tables
