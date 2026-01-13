@@ -26,60 +26,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Build site
+        uses: ./
         with:
-          node-version: '22'
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/
-            ~/.cargo/git/
-            preprocessor/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: Clone Quartz
-        run: |
-          git clone --depth 1 https://github.com/jackyzha0/quartz.git quartz-build
-          cd quartz-build && npm ci
-
-      - name: Build preprocessor
-        run: |
-          cd preprocessor
-          cargo build --release
-
-      - name: Preprocess example Logseq content
-        run: |
-          ./preprocessor/target/release/logseq-to-quartz \
-            --input example \
-            --output quartz-build/content \
-            --create-stubs
-
-      - name: Copy theme customizations
-        run: |
-          THEME_DIR="quartz-theme"
-          echo "Copying theme customizations..."
-          cp "$THEME_DIR/quartz.config.ts" quartz-build/
-          cp "$THEME_DIR/quartz.layout.ts" quartz-build/
-          cp "$THEME_DIR/styles/custom.scss" quartz-build/quartz/styles/
-          cp "$THEME_DIR/path.ts" quartz-build/quartz/util/
-          # Components
-          cp $THEME_DIR/components/*.tsx quartz-build/quartz/components/
-          cp "$THEME_DIR/components/components-index.ts" quartz-build/quartz/components/index.ts
-          # Scripts and styles
-          cp $THEME_DIR/scripts/*.ts quartz-build/quartz/components/scripts/
-          cp $THEME_DIR/styles/*.scss quartz-build/quartz/components/styles/
-
-      - name: Build Quartz site
-        run: |
-          cd quartz-build
-          npx quartz build -o ../public
+          graph-path: 'example'
+          output-path: 'public'
 
       - name: Fix paths for subdirectory deployment
         run: |
