@@ -27,22 +27,27 @@ export function pageResources(
   baseDir: FullSlug | RelativeURL,
   staticResources: StaticResources,
 ): StaticResources {
-  // Use flat paths from root - the <base> tag handles subdirectory resolution
-  // Don't use ".." as it breaks with base tag on subdirectory deployments
-  const rootPath = "."
-  const contentIndexPath = joinSegments(rootPath, "static/contentIndex.json")
+  // pathToRoot doesn't account for pages being rendered as folder/index.html
+  // So we need to go up one more level to reach actual root
+  let adjustedBaseDir: string = baseDir
+  if (adjustedBaseDir === ".") {
+    adjustedBaseDir = ".."
+  } else {
+    adjustedBaseDir = "../" + adjustedBaseDir
+  }
+  const contentIndexPath = joinSegments(adjustedBaseDir, "static/contentIndex.json")
   const contentIndexScript = `const fetchData = fetch("${contentIndexPath}").then(data => data.json())`
 
   const resources: StaticResources = {
     css: [
       {
-        content: joinSegments(rootPath, "index.css"),
+        content: joinSegments(adjustedBaseDir, "index.css"),
       },
       ...staticResources.css,
     ],
     js: [
       {
-        src: joinSegments(rootPath, "prescript.js"),
+        src: joinSegments(adjustedBaseDir, "prescript.js"),
         loadTime: "beforeDOMReady",
         contentType: "external",
       },
@@ -58,7 +63,7 @@ export function pageResources(
   }
 
   resources.js.push({
-    src: joinSegments(rootPath, "postscript.js"),
+    src: joinSegments(adjustedBaseDir, "postscript.js"),
     loadTime: "afterDOMReady",
     moduleType: "module",
     contentType: "external",

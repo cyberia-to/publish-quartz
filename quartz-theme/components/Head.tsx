@@ -36,14 +36,8 @@ export default (() => {
     )
     const ogImageDefaultPath = `https://${cfg.baseUrl}/static/og-image.png`
 
-    // For subdirectory deployments, add a base tag to fix relative path resolution
-    const pathPrefix = url.pathname
-    const needsBaseTag = pathPrefix && pathPrefix !== "/"
-    const baseHref = needsBaseTag ? `https://${cfg.baseUrl}/` : undefined
-
     return (
       <head>
-        {baseHref && <base href={baseHref} />}
         <title>{title}</title>
         <meta charSet="utf-8" />
         {cfg.theme.cdnCaching && cfg.theme.fontOrigin === "googleFonts" && (

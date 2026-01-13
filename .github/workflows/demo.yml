@@ -81,6 +81,19 @@ jobs:
           cd quartz-build
           npx quartz build -o ../public
 
+      - name: Fix paths for subdirectory deployment
+        run: |
+          # Fix CSS/JS paths from relative to absolute for subdirectory deployment
+          # Changes ../index.css to /publish-quartz/index.css etc.
+          find public -name "*.html" -exec sed -i \
+            -e 's|href="\.\./index\.css"|href="/publish-quartz/index.css"|g' \
+            -e 's|href="\.\./">|href="/publish-quartz/">|g' \
+            -e 's|src="\.\./prescript\.js"|src="/publish-quartz/prescript.js"|g' \
+            -e 's|src="\.\./postscript\.js"|src="/publish-quartz/postscript.js"|g' \
+            -e 's|fetch("\.\./static/contentIndex\.json")|fetch("/publish-quartz/static/contentIndex.json")|g' \
+            {} \;
+          echo "Fixed paths for subdirectory deployment"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
