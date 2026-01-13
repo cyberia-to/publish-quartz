@@ -308,10 +308,6 @@ pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize>
             continue;
         }
 
-        // Skip special patterns - $ prefixed pages (including escaped \$), date-like patterns
-        if link.starts_with('$') || link.starts_with("_$") || link.starts_with("\\$") || link.starts_with("_\\$") {
-            continue;
-        }
         // Skip date patterns like 2024-01-15, 2024_01_15, 2024 01 15
         if link.len() >= 8 && link.len() <= 12 {
             let is_date = link.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ');
@@ -320,8 +316,9 @@ pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize>
             }
         }
 
-        // Sanitize link for filesystem
-        let safe_link = link.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
+        // Unescape dollar signs first (from \$ to $), then sanitize for filesystem
+        let unescaped_link = link.replace("\\$", "$");
+        let safe_link = unescaped_link.replace(['/', ':', '*', '?', '"', '<', '>', '|'], "_");
 
         let stub_path = output_dir.join(format!("{}.md", safe_link));
         if stub_path.exists() {

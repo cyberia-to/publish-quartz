@@ -24,6 +24,7 @@ lazy_static! {
     static ref QUERY_PROPS_RE: Regex = Regex::new(r"query-properties::\s*\[:?([^\]]+)\]").unwrap();
     static ref QUERY_SORT_BY_RE: Regex = Regex::new(r"query-sort-by::\s*:?(\S+)").unwrap();
     static ref QUERY_SORT_DESC_RE: Regex = Regex::new(r"query-sort-desc::\s*(true|false)").unwrap();
+    static ref QUERY_TABLE_RE: Regex = Regex::new(r"query-table::\s*(true|false)").unwrap();
 }
 
 /// Execute a Logseq query and return matching pages
@@ -95,8 +96,9 @@ fn execute_expr<'a>(expr: &str, index: &'a PageIndex) -> Vec<&'a Page> {
             return index
                 .iter()
                 .filter(|p| {
-                    // Check if page name looks like a date
-                    if let Some(page_date) = parse_date(&p.name) {
+                    // Check if page name looks like a date (strip journals/ prefix if present)
+                    let name = p.name.strip_prefix("journals/").unwrap_or(&p.name);
+                    if let Some(page_date) = parse_date(name) {
                         page_date >= start && page_date <= end
                     } else {
                         false
@@ -347,6 +349,8 @@ pub struct QueryOptions {
     pub properties: Vec<String>,
     pub sort_by: Option<String>,
     pub sort_desc: bool,
+    /// None = default (table), Some(true) = force table, Some(false) = force list
+    pub table: Option<bool>,
 }
 
 /// Parse query options from surrounding context (the block containing the query)
@@ -371,6 +375,11 @@ pub fn parse_query_options(context: &str) -> QueryOptions {
     // Parse query-sort-desc:: true/false
     if let Some(caps) = QUERY_SORT_DESC_RE.captures(context) {
         opts.sort_desc = caps.get(1).unwrap().as_str() == "true";
+    }
+
+    // Parse query-table:: true/false (explicit override)
+    if let Some(caps) = QUERY_TABLE_RE.captures(context) {
+        opts.table = Some(caps.get(1).unwrap().as_str() == "true");
     }
 
     opts
@@ -415,13 +424,24 @@ pub fn results_to_markdown_with_options(
         sorted.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
-    // If properties are specified, render as table
+    // If properties are specified, render as table with those properties
     if !options.properties.is_empty() {
         return render_table(&sorted, &options.properties);
     }
 
-    // Otherwise render as list
-    sorted
+    // If explicitly disabled with query-table:: false, render as list
+    if options.table == Some(false) {
+        return render_list(&sorted);
+    }
+
+    // Default: auto-detect properties and render as table (like Logseq)
+    let auto_props = detect_common_properties(&sorted);
+    render_table(&sorted, &auto_props)
+}
+
+/// Render results as a markdown list
+fn render_list(results: &[&Page]) -> String {
+    results
         .iter()
         .map(|p| {
             let icon = p.properties.get("icon").map_or("", |s| s.as_str());
@@ -495,13 +515,13 @@ fn render_table(results: &[&Page], properties: &[String]) -> String {
         for prop in properties {
             let value = match prop.to_lowercase().as_str() {
                 "page" | "name" => {
-                    let title = page
-                        .properties
-                        .get("title")
-                        .map_or(page.name.replace('_', " "), |t| t.clone());
-                    format!("[[{}|{}]]", page.name, title)
+                    // Use plain wikilink without alias to avoid pipe conflicts in tables
+                    format!("[[{}]]", page.name)
                 }
-                _ => get_page_property(page, prop),
+                _ => {
+                    // Escape any pipes in cell values using HTML entity
+                    get_page_property(page, prop).replace('|', "&#124;")
+                }
             };
             output.push_str(&format!(" {} |", value));
         }
@@ -509,6 +529,47 @@ fn render_table(results: &[&Page], properties: &[String]) -> String {
     }
 
     output
+}
+
+/// Detect common properties from query results for automatic table rendering
+fn detect_common_properties(results: &[&Page]) -> Vec<String> {
+    // Always include page name first
+    let mut props = vec!["page".to_string()];
+
+    // Count property occurrences across results
+    let mut prop_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+
+    for page in results {
+        for key in page.properties.keys() {
+            // Skip internal/system properties
+            let key_lower = key.to_lowercase();
+            if key_lower == "title" || key_lower == "icon" || key_lower == "public"
+               || key_lower == "alias" || key_lower == "aliases" {
+                continue;
+            }
+            *prop_counts.entry(key.clone()).or_insert(0) += 1;
+        }
+        // Count tags if any page has tags
+        if !page.tags.is_empty() {
+            *prop_counts.entry("tags".to_string()).or_insert(0) += 1;
+        }
+    }
+
+    // Include properties that appear in at least 30% of results (or at least 1 if few results)
+    let threshold = std::cmp::max(1, results.len() / 3);
+
+    // Sort by frequency (most common first), then alphabetically
+    let mut prop_list: Vec<_> = prop_counts.into_iter()
+        .filter(|(_, count)| *count >= threshold)
+        .collect();
+    prop_list.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+
+    // Add top properties (limit to 4 columns total including page name)
+    for (prop, _) in prop_list.into_iter().take(3) {
+        props.push(prop);
+    }
+
+    props
 }
 
 /// Get all unique tags from the index

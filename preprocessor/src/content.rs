@@ -5,9 +5,10 @@ use crate::page::PageIndex;
 
 lazy_static! {
     // Logseq system properties to remove completely (not user data)
-    // Note: query-properties, query-sort-by, query-sort-desc are handled by query processing
+    // Note: query-* properties (query-table, query-properties, query-sort-by, query-sort-desc)
+    // are handled by query processing, not removed here
     static ref SYSTEM_PROPS_RE: Regex = Regex::new(
-        r"(?m)^(\s*)(?:-\s*)?(collapsed|logseq\.order-list-type|id|query-table):: .+$"
+        r"(?m)^(\s*)(?:-\s*)?(collapsed|logseq\.order-list-type|id):: .+$"
     ).unwrap();
 
     // LOGBOOK blocks (time tracking) - remove lines containing :LOGBOOK:, CLOCK:, :END:
@@ -83,8 +84,6 @@ lazy_static! {
     // Wikilinks (for adding pages/ prefix)
     static ref WIKILINK_RE: Regex = Regex::new(r"(!\s*)?\[\[([^\]|]+)(\|[^\]]*)?\]\]").unwrap();
 
-    // Tables - fix pipe in first cell
-    static ref TABLE_FIRST_CELL_RE: Regex = Regex::new(r"(?m)^-\s+\|").unwrap();
 }
 
 /// Transform Logseq content to Quartz-compatible format
@@ -135,8 +134,8 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Remove empty bullet lines
     result = EMPTY_BULLET_RE.replace_all(&result, "").to_string();
 
-    // Fix tables - remove list marker from first cell
-    result = TABLE_FIRST_CELL_RE.replace_all(&result, "|").to_string();
+    // Fix tables - extract from bullet points and format as proper markdown tables
+    result = fix_tables(&result);
 
     // Escape $ in wikilinks
     result = WIKILINK_DOLLAR_RE
@@ -260,6 +259,7 @@ fn process_queries_with_options(content: &str, page_index: &crate::page::PageInd
                 if prev_line.contains("query-properties::")
                     || prev_line.contains("query-sort-by::")
                     || prev_line.contains("query-sort-desc::")
+                    || prev_line.contains("query-table::")
                 {
                     context = format!("{}\n{}", prev_line, context);
                 } else {
@@ -276,12 +276,14 @@ fn process_queries_with_options(content: &str, page_index: &crate::page::PageInd
 
             // Format output with proper indentation
             let formatted_output = if output.contains('|') && output.contains("---") {
-                // Table output - add indentation to each line
-                output
+                // Table output - needs blank line before for markdown to recognize it
+                // Tables should NOT have list markers, just indentation
+                let table_lines: Vec<_> = output
                     .lines()
                     .map(|line| format!("{}{}", indent, line))
-                    .collect::<Vec<_>>()
-                    .join("\n")
+                    .collect();
+                // Add blank line before table for proper markdown parsing
+                format!("\n{}", table_lines.join("\n"))
             } else {
                 // List output - add full prefix (indent + list marker) to each line
                 // If no list marker on the query, use "- " as default
@@ -556,4 +558,120 @@ fn parse_hiccup_content(content: &str) -> String {
     }
 
     result
+}
+
+/// Fix tables embedded in Logseq bullet points
+/// Logseq tables look like:
+/// \t- | col1 | col2 |
+/// \t  |------|------|
+/// \t  | val1 | val2 |
+/// This function adds separator rows if missing while preserving document structure
+fn fix_tables(content: &str) -> String {
+    let lines: Vec<&str> = content.lines().collect();
+    let mut result = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i];
+
+        // Check if this line contains a table row (has | and looks like table syntax)
+        // A table row starts with optional whitespace, optional "- ", then "|"
+        let trimmed = line.trim();
+        let after_bullet = trimmed.trim_start_matches('-').trim_start();
+
+        if after_bullet.starts_with('|') && after_bullet.matches('|').count() >= 2 {
+            // Found a table start - collect all table rows while preserving structure
+            let mut table_lines: Vec<String> = Vec::new();
+            let mut table_contents: Vec<String> = Vec::new(); // Just the | ... | parts
+
+            // Get the indentation prefix (everything before the | part)
+            let first_line_prefix = get_line_prefix(line);
+            table_lines.push(line.to_string());
+            table_contents.push(after_bullet.to_string());
+            i += 1;
+
+            // Collect continuation lines
+            while i < lines.len() {
+                let next_line = lines[i];
+                let next_trimmed = next_line.trim();
+
+                // Check if this is a table continuation (indented line with |)
+                if next_trimmed.starts_with('|') {
+                    table_lines.push(next_line.to_string());
+                    table_contents.push(next_trimmed.to_string());
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+
+            // Check if table has a separator row
+            let has_separator = table_contents.iter().any(|line| {
+                is_separator_row(line)
+            });
+
+            // Output table with separator if needed
+            // First row (header)
+            result.push(table_lines[0].clone());
+
+            // Add separator after first row if missing
+            if !has_separator && table_contents.len() > 1 {
+                let col_count = table_contents[0].matches('|').count().saturating_sub(1);
+                if col_count > 0 {
+                    // Use same indentation as continuation lines (without the "- ")
+                    let continuation_prefix = get_continuation_prefix(&first_line_prefix);
+                    let separator = format!("{}|{}|", continuation_prefix, vec!["---"; col_count].join("|"));
+                    result.push(separator);
+                }
+            }
+
+            // Add remaining rows
+            for table_line in table_lines.iter().skip(1) {
+                result.push(table_line.clone());
+            }
+        } else {
+            result.push(line.to_string());
+            i += 1;
+        }
+    }
+
+    result.join("\n")
+}
+
+/// Check if a line is a markdown table separator row (only |, -, :, spaces)
+fn is_separator_row(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with('|')
+        && trimmed.ends_with('|')
+        && trimmed.chars().all(|c| c == '|' || c == '-' || c == ':' || c == ' ')
+        && trimmed.contains('-')
+}
+
+/// Get the prefix (indentation + bullet) from a line
+fn get_line_prefix(line: &str) -> String {
+    // Find where the | starts
+    if let Some(pos) = line.find('|') {
+        line[..pos].to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// Get continuation line prefix from first line prefix
+/// e.g., "\t- " becomes "\t  " (replace "- " with "  ")
+fn get_continuation_prefix(first_prefix: &str) -> String {
+    // Replace the last "- " with "  " for continuation lines
+    if let Some(pos) = first_prefix.rfind("- ") {
+        let mut result = first_prefix.to_string();
+        result.replace_range(pos..pos+2, "  ");
+        result
+    } else if first_prefix.ends_with('-') {
+        // Handle case where it's just "-" without space
+        let mut result = first_prefix.to_string();
+        result.pop();
+        result.push(' ');
+        result
+    } else {
+        first_prefix.to_string()
+    }
 }

@@ -72,6 +72,12 @@ alias:: Markdown Guide, Syntax Reference
 	  | Embeds | Yes | Page and block |
 	  | Queries | Yes | Multiple types |
 	  | Tasks | Yes | All markers |
+	- ### Complex Table
+		- | problem | mechanism |
+		  | complex taxation | 1% from transfers + burn on service use |
+		  | local overpopulation | staking mechanism for residentship |
+		  | no collective insurance | capital driven basic income |
+		  | broken ecology | automated slashing driven by sensor network |
 - ## Blockquotes
 	- > This is a blockquote.
 	  > It can span multiple lines.

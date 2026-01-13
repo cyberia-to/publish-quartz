@@ -29,6 +29,10 @@ tags:: queries, advanced, demo
 	- query-properties:: [:page, :status, :tags]
 	  query-sort-by:: name
 	  {{query (page-tags [[project]])}}
+	- ### Auto Table (query-table:: true)
+		- Automatically detects properties from results:
+		- query-table:: true
+		  {{query (page-tags [[documentation]])}}
 - ## Sorted Queries
 	- Sort by created date (descending):
 	- query-sort-by:: created
@@ -42,9 +46,35 @@ tags:: queries, advanced, demo
 	- ### NOT - Exclude matches
 		- Exclude pages named "Syntax Guide" (keeps pages that reference it):
 		- {{query (and (page-tags [[documentation]]) (not (page [[Syntax Guide]])))}}
+- ## Complex Nested Queries
+	- ### Nested AND with NOT
+		- Find pages with "species" tag but NOT "extinct":
+		- {{query (and (page-tags [[species]]) (not (page-tags [[extinct]])))}}
+	- ### Multiple NOT conditions
+		- Find species that are NOT extinct AND NOT endangered:
+		- {{query (and (page-tags [[species]]) (not (page-tags [[extinct]])) (not (page-tags [[endangered]])))}}
+	- ### Deeply nested query
+		- Find species with research AND NOT extinct:
+		- {{query (and (page-tags [[species]]) (not (page-tags [[extinct]])) (and (page-tags [[research]])))}}
+	- ### Complex OR with nested ANDs
+		- Pages that are (species AND research) OR (project AND active):
+		- {{query (or (and (page-tags [[species]]) (page-tags [[research]])) (and (page-tags [[project]]) (property status active)))}}
+- ## Custom Tag Query
+	- Find pages tagged with "aip":
+		- {{query (page-tags [[aip]])}}
 - ## Text Search
 	- Search for specific text:
 		- {{query "markdown"}}
+- ## Manual Tables
+	- Regular markdown tables also work:
+
+	  | Feature | [[$CYBER]] chain | [[$CYBER on $SOL]] |
+	  | --- | --- | --- |
+	  | utility | independent chain for memes | promo meme token |
+	  | supply | ~1P $CYBER | 1B $CYBER |
+	  | scale | [[superintelligence]] | [[ai]] |
+	  | launch | Nov 2022 | Nov 2024 |
+	  | distribution | fair | fair |
 - ## Notes
 	- Queries are executed at build time by publish-quartz
 	- Results are rendered as markdown lists or tables

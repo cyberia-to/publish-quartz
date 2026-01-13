@@ -560,7 +560,7 @@ mod query_tests {
     }
 
     #[test]
-    fn test_query_results_as_list() {
+    fn test_query_results_default_table() {
         let pages = vec![
             create_test_page("my-page", vec!["test"]),
         ];
@@ -568,10 +568,102 @@ mod query_tests {
         let results = query::execute("{{query (page-tags [[test]])}}", &pages);
         let markdown = query::results_to_markdown_with_options(&results, "test query", &query::QueryOptions::default());
 
+        // Default is now table view (like Logseq)
         assert!(
-            markdown.contains("[[my-page|my-page]]"),
-            "Results should be formatted as links, got: {}",
+            markdown.contains("| Page |"),
+            "Default should be table view, got: {}",
             markdown
         );
+        assert!(
+            markdown.contains("[[my-page]]"),
+            "Table should contain page link, got: {}",
+            markdown
+        );
+    }
+
+    #[test]
+    fn test_query_results_explicit_list() {
+        let pages = vec![
+            create_test_page("my-page", vec!["test"]),
+        ];
+
+        let results = query::execute("{{query (page-tags [[test]])}}", &pages);
+        let opts = query::QueryOptions {
+            table: Some(false),  // Explicitly request list
+            ..Default::default()
+        };
+        let markdown = query::results_to_markdown_with_options(&results, "test query", &opts);
+
+        assert!(
+            markdown.contains("- [[my-page|my-page]]"),
+            "Should render as list when table=false, got: {}",
+            markdown
+        );
+    }
+
+    #[test]
+    fn test_query_nested_and() {
+        // Test: (and (page-tags [[genus]]) (not (page-tags [[class]])) (and (page-tags [[research]])))
+        let pages = vec![
+            create_test_page("page1", vec!["genus", "research"]),           // should match
+            create_test_page("page2", vec!["genus", "class", "research"]),  // should NOT (has class)
+            create_test_page("page3", vec!["genus"]),                        // should NOT (no research)
+            create_test_page("page4", vec!["genus", "research", "other"]),  // should match
+        ];
+
+        let results = query::execute(
+            "{{query (and (page-tags [[genus]]) (not (page-tags [[class]])) (and (page-tags [[research]])))}}",
+            &pages
+        );
+
+        assert_eq!(results.len(), 2, "Should match pages with genus AND research but NOT class");
+        let names: Vec<_> = results.iter().map(|p| &p.name).collect();
+        assert!(names.contains(&&"page1".to_string()));
+        assert!(names.contains(&&"page4".to_string()));
+    }
+
+    #[test]
+    fn test_query_multiple_nots() {
+        // Test: (and (page-tags [[genus]]) (not (page-tags [[class]])) (not (page-tags [[research]])) (not (page-tags [[prohibited]])))
+        let pages = vec![
+            create_test_page("page1", vec!["genus"]),                              // should match
+            create_test_page("page2", vec!["genus", "class"]),                     // should NOT
+            create_test_page("page3", vec!["genus", "research"]),                  // should NOT
+            create_test_page("page4", vec!["genus", "prohibited"]),                // should NOT
+            create_test_page("page5", vec!["genus", "allowed"]),                   // should match
+            create_test_page("page6", vec!["genus", "class", "research"]),         // should NOT
+        ];
+
+        let results = query::execute(
+            "{{query (and (page-tags [[genus]]) (not (page-tags [[class]])) (not (page-tags [[research]])) (not (page-tags [[prohibited]])))}}",
+            &pages
+        );
+
+        assert_eq!(results.len(), 2, "Should match pages with genus but NOT class, research, or prohibited");
+        let names: Vec<_> = results.iter().map(|p| &p.name).collect();
+        assert!(names.contains(&&"page1".to_string()));
+        assert!(names.contains(&&"page5".to_string()));
+    }
+
+    #[test]
+    fn test_query_complex_nested_or_and() {
+        // Test complex: (or (and (page-tags [[a]]) (page-tags [[b]])) (and (page-tags [[c]]) (page-tags [[d]])))
+        let pages = vec![
+            create_test_page("page1", vec!["a", "b"]),           // matches first AND
+            create_test_page("page2", vec!["c", "d"]),           // matches second AND
+            create_test_page("page3", vec!["a"]),                // no match
+            create_test_page("page4", vec!["a", "b", "c", "d"]), // matches both
+        ];
+
+        let results = query::execute(
+            "{{query (or (and (page-tags [[a]]) (page-tags [[b]])) (and (page-tags [[c]]) (page-tags [[d]])))}}",
+            &pages
+        );
+
+        assert_eq!(results.len(), 3, "Should match pages with (a AND b) OR (c AND d)");
+        let names: Vec<_> = results.iter().map(|p| &p.name).collect();
+        assert!(names.contains(&&"page1".to_string()));
+        assert!(names.contains(&&"page2".to_string()));
+        assert!(names.contains(&&"page4".to_string()));
     }
 }

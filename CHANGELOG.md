@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.0] - 2025-01-13
+
+### Added
+- Query results now render as tables by default (like Logseq)
+- Auto-detect properties for table columns (Page, Tags, and common properties)
+- Complex nested query support: AND with NOT, multiple NOTs, nested ANDs/ORs
+- `query-table:: false` option to force list view instead of table
+- Stub pages for `$` prefixed links (e.g., `[[$CYBER]]` creates `$cyber.md`)
+- Example pages demonstrating complex queries and manual tables
+
+### Fixed
+- Tables now render properly with blank line before for markdown parsing
+- Stub page naming for escaped dollar signs (`\$` → `$`)
+
+### Changed
+- Default query output changed from list to table view
+
 ## [0.2.1] - 2025-01-13
 
 ### Changed
