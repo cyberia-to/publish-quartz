@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4] - 2025-01-13
+
+### Fixed
+- CSS and assets now load correctly on GitHub Pages subdirectory deployments
+- Added `<base>` tag for subdirectory deployments to fix relative path resolution
+- Fixes 404 errors for `index.css`, `prescript.js`, etc. when deployed to `username.github.io/repo/`
+
 ## [0.3.3] - 2025-01-13
 
 ### Fixed
