@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2] - 2025-01-13
+
+### Fixed
+- Query parsing now handles extra whitespace anywhere in expressions
+- Works with: `(and   ...)`, `(not   ...)`, `(page-tags [[tag]] )`, etc.
+- Flexible keyword matching no longer uses hardcoded string offsets
+
 ## [0.3.1] - 2025-01-13
 
 ### Fixed

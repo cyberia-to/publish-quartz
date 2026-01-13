@@ -4,21 +4,21 @@ use regex::Regex;
 use crate::page::{Page, PageIndex};
 
 lazy_static! {
-    // Query patterns
-    static ref PAGE_TAGS_RE: Regex = Regex::new(r"(?i)^\(page-tags\s+\[\[([^\]]+)\]\]\)$").unwrap();
-    static ref PAGE_RE: Regex = Regex::new(r"(?i)^\(page\s+\[\[([^\]]+)\]\]\)$").unwrap();
-    static ref NAMESPACE_RE: Regex = Regex::new(r"(?i)^\(namespace\s+\[\[([^\]]+)\]\]\)$").unwrap();
-    static ref PROPERTY_RE: Regex = Regex::new(r#"(?i)^\((?:page-)?property\s+:?(\w+[-\w]*)(?:\s+(?:"([^"]+)"|(\S+)))?\)$"#).unwrap();
+    // Query patterns - allow optional whitespace before closing paren
+    static ref PAGE_TAGS_RE: Regex = Regex::new(r"(?i)^\(page-tags\s+\[\[([^\]]+)\]\]\s*\)$").unwrap();
+    static ref PAGE_RE: Regex = Regex::new(r"(?i)^\(page\s+\[\[([^\]]+)\]\]\s*\)$").unwrap();
+    static ref NAMESPACE_RE: Regex = Regex::new(r"(?i)^\(namespace\s+\[\[([^\]]+)\]\]\s*\)$").unwrap();
+    static ref PROPERTY_RE: Regex = Regex::new(r#"(?i)^\((?:page-)?property\s+:?(\w+[-\w]*)(?:\s+(?:"([^"]+)"|(\S+)))?\s*\)$"#).unwrap();
     // Matches (task STATE) or (task STATE1 STATE2 ...)
-    static ref TASK_RE: Regex = Regex::new(r"(?i)^\(task\s+((?:TODO|DONE|NOW|DOING|LATER|WAITING|CANCELLED)(?:\s+(?:TODO|DONE|NOW|DOING|LATER|WAITING|CANCELLED))*)\)$").unwrap();
+    static ref TASK_RE: Regex = Regex::new(r"(?i)^\(task\s+((?:TODO|DONE|NOW|DOING|LATER|WAITING|CANCELLED)(?:\s+(?:TODO|DONE|NOW|DOING|LATER|WAITING|CANCELLED))*)\s*\)$").unwrap();
     static ref PAGE_REF_RE: Regex = Regex::new(r"^\[\[([^\]]+)\]\]$").unwrap();
     static ref TEXT_SEARCH_RE: Regex = Regex::new(r#"^"([^"]+)"$"#).unwrap();
 
-    // New query patterns
-    static ref PRIORITY_RE: Regex = Regex::new(r"(?i)^\(priority\s+([abc])\)$").unwrap();
-    static ref BETWEEN_RE: Regex = Regex::new(r"(?i)^\(between\s+\[\[([^\]]+)\]\]\s+\[\[([^\]]+)\]\]\)$").unwrap();
-    static ref SORT_BY_RE: Regex = Regex::new(r"(?i)^\(sort-by\s+:?(\w+[-\w]*)\s*(asc|desc)?\)$").unwrap();
-    static ref ALL_PAGE_TAGS_RE: Regex = Regex::new(r"(?i)^\(all-page-tags\)$").unwrap();
+    // New query patterns - allow optional whitespace before closing paren
+    static ref PRIORITY_RE: Regex = Regex::new(r"(?i)^\(priority\s+([abc])\s*\)$").unwrap();
+    static ref BETWEEN_RE: Regex = Regex::new(r"(?i)^\(between\s+\[\[([^\]]+)\]\]\s+\[\[([^\]]+)\]\]\s*\)$").unwrap();
+    static ref SORT_BY_RE: Regex = Regex::new(r"(?i)^\(sort-by\s+:?(\w+[-\w]*)\s*(asc|desc)?\s*\)$").unwrap();
+    static ref ALL_PAGE_TAGS_RE: Regex = Regex::new(r"(?i)^\(all-page-tags\s*\)$").unwrap();
 
     // Query options (inline properties)
     static ref QUERY_PROPS_RE: Regex = Regex::new(r"query-properties::\s*\[:?([^\]]+)\]").unwrap();
@@ -40,23 +40,38 @@ pub fn execute<'a>(query_str: &str, index: &'a PageIndex) -> Vec<&'a Page> {
 }
 
 fn execute_expr<'a>(expr: &str, index: &'a PageIndex) -> Vec<&'a Page> {
+    // Normalize whitespace: trim and collapse multiple spaces
     let expr = expr.trim();
 
+    // Helper to extract inner content from (keyword ...) with flexible whitespace
+    fn extract_inner<'b>(expr: &'b str, keyword: &str) -> Option<&'b str> {
+        let lower = expr.to_lowercase();
+        if lower.starts_with(&format!("({}", keyword)) && expr.ends_with(')') {
+            // Find where the keyword ends and content begins
+            let after_paren = &expr[1..]; // skip '('
+            let after_keyword = after_paren.strip_prefix(keyword)
+                .or_else(|| after_paren.strip_prefix(&keyword.to_uppercase()))?;
+            let inner = after_keyword.trim_start(); // skip whitespace after keyword
+            // Remove trailing ')'
+            if inner.ends_with(')') {
+                return Some(&inner[..inner.len() - 1]);
+            }
+        }
+        None
+    }
+
     // Handle (and ...)
-    if expr.starts_with("(and ") && expr.ends_with(')') {
-        let inner = &expr[5..expr.len() - 1];
+    if let Some(inner) = extract_inner(expr, "and") {
         return execute_and(inner, index);
     }
 
     // Handle (or ...)
-    if expr.starts_with("(or ") && expr.ends_with(')') {
-        let inner = &expr[4..expr.len() - 1];
+    if let Some(inner) = extract_inner(expr, "or") {
         return execute_or(inner, index);
     }
 
     // Handle (not ...)
-    if expr.starts_with("(not ") && expr.ends_with(')') {
-        let inner = &expr[5..expr.len() - 1];
+    if let Some(inner) = extract_inner(expr, "not") {
         let excluded = execute_expr(inner, index);
         let excluded_names: std::collections::HashSet<_> =
             excluded.iter().map(|p| &p.name).collect();

@@ -666,4 +666,48 @@ mod query_tests {
         assert!(names.contains(&&"page2".to_string()));
         assert!(names.contains(&&"page4".to_string()));
     }
+
+    #[test]
+    fn test_query_with_extra_spaces() {
+        // Test query with extra spaces before closing parens (common in Logseq)
+        let pages = vec![
+            create_test_page("page1", vec!["genus", "prohibited"]),
+            create_test_page("page2", vec!["genus", "class"]),
+            create_test_page("page3", vec!["genus"]),
+        ];
+
+        // Query with extra space before closing paren: [[prohibited]] ))
+        let results = query::execute(
+            "{{query (and (page-tags [[genus]]) (not (page-tags [[class]])) (and (page-tags [[prohibited]] )))}}",
+            &pages
+        );
+
+        assert_eq!(results.len(), 1, "Should match page with genus+prohibited but not class");
+        assert_eq!(results[0].name, "page1");
+    }
+
+    #[test]
+    fn test_query_with_various_whitespace() {
+        // Test query with extra spaces in various positions
+        let pages = vec![
+            create_test_page("page1", vec!["a", "b"]),
+            create_test_page("page2", vec!["a"]),
+        ];
+
+        // Extra spaces after keywords
+        let results = query::execute(
+            "{{query (and   (page-tags [[a]])  (page-tags [[b]]) )}}",
+            &pages
+        );
+        assert_eq!(results.len(), 1, "Should handle extra spaces after 'and'");
+        assert_eq!(results[0].name, "page1");
+
+        // Extra spaces in NOT
+        let results2 = query::execute(
+            "{{query (and (page-tags [[a]]) (not   (page-tags [[b]]) ))}}",
+            &pages
+        );
+        assert_eq!(results2.len(), 1, "Should handle extra spaces after 'not'");
+        assert_eq!(results2[0].name, "page2");
+    }
 }
