@@ -37,8 +37,6 @@ pub fn process_favorites(
 
     let mut count = 0;
     for fav in &favorites {
-        let slug = slugify(fav);
-
         // Check if page exists - try original name first, then with namespace separator
         let page_path = if fav.contains('/') {
             // Namespace page like "Projects/Web App" -> "Projects/Web App.md"
@@ -55,22 +53,23 @@ pub fn process_favorites(
         // Get icon from page if exists
         let icon = get_page_icon(&page_path).unwrap_or_default();
 
-        // Create favorite embed file (use slugified name for URL-safe paths)
+        // Create redirect file in favorites folder (shows in Explorer, redirects to actual page)
+        let slug = fav.to_lowercase().replace(' ', "-").replace('/', "-");
         let fav_path = favorites_output.join(format!("{}.md", slug));
         let fav_content = format!(
-            "---\ntitle: \"{}{}\"\n---\n\n![[{}]]\n",
+            "---\ntitle: \"{}{}\"\nredirect: \"{}\"\n---\n",
             if icon.is_empty() { String::new() } else { format!("{} ", icon) },
             fav,
-            fav  // Use original name for embed link
+            fav
         );
-
         fs::write(&fav_path, fav_content)?;
+
         count += 1;
 
-        // Add to index
+        // Add to index - link directly to the actual page (like Logseq does)
         index_content.push_str(&format!(
-            "- [[favorites/{}|{}{}]]\n",
-            slug,
+            "- [[{}|{}{}]]\n",
+            fav,
             if icon.is_empty() { String::new() } else { format!("{} ", icon) },
             fav
         ));
@@ -96,16 +95,6 @@ fn extract_favorites(content: &str) -> Vec<String> {
     }
 
     favorites
-}
-
-/// Convert page name to slug (matching page filename format)
-fn slugify(name: &str) -> String {
-    name.to_lowercase()
-        .replace(' ', "-")
-        .replace('/', "-")
-        .chars()
-        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
-        .collect()
 }
 
 /// Get icon from page frontmatter or properties

@@ -26,6 +26,7 @@ import ConditionalRender from "./ConditionalRender"
 import SidebarToggle from "./SidebarToggle"
 import Favorites from "./Favorites"
 import Journals from "./Journals"
+import Redirect from "./Redirect"
 
 export {
   ArticleTitle,
@@ -56,4 +57,5 @@ export {
   SidebarToggle,
   Favorites,
   Journals,
+  Redirect,
 }
