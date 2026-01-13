@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.3] - 2025-01-13
+
+### Fixed
+- Explorer navigation now works correctly for pages with both content and children
+- Clicking on unrelated pages from folder pages no longer prepends the current path
+- Example: On `/bostrom/` clicking `cv/districts` now correctly goes to `/cv/districts` instead of `/bostrom/cv/districts`
+- Fixed by passing `allSlugs` to `resolveRelative` in explorer for proper folder detection
+
 ## [0.3.2] - 2025-01-13
 
 ### Fixed
