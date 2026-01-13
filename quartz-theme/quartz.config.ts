@@ -15,7 +15,7 @@ const config: QuartzConfig = {
       host: "https://metrics.cyb.ai",
     },
     locale: "en-US",
-    baseUrl: "docs.cyb.ai",
+    baseUrl: "cyberia-to.github.io/publish-quartz",
     ignorePatterns: ["private", "templates", ".obsidian"],
     defaultDateType: "modified",
     theme: {
