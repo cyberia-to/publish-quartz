@@ -101,10 +101,20 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
     let repo_root = &config.input_dir;
     let git_dates = page::get_all_git_dates(repo_root);
 
-    // Step 2: Build page index for queries
+    // Step 2: Build page index for queries (includes pages and journals)
     println!("Building page index...");
     let pages_dir = config.input_dir.join("pages");
-    let page_index = page::build_index(&pages_dir)?;
+    let journals_dir = config.input_dir.join("journals");
+    let mut page_index = page::build_index(&pages_dir)?;
+    if journals_dir.exists() {
+        let journal_index = page::build_index(&journals_dir)?;
+        // Prefix journal pages with journals/ so query result links work
+        for mut page in journal_index {
+            page.name = format!("journals/{}", page.name);
+            page.name_lower = page.name.to_lowercase();
+            page_index.push(page);
+        }
+    }
     println!("Indexed {} pages", page_index.len());
 
     // Step 3: Process pages in parallel
@@ -150,21 +160,30 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
         println!("Created: {} favorite pages", stats.favorites_created);
     }
 
-    // Step 6: Write site config and create index.md
+    // Step 6: Write site config and create index.md by copying home page
     let site_config = favorites::write_site_config(&config_path, &config.output_dir);
     let index_path = config.output_dir.join("index.md");
     if !index_path.exists() {
-        let (home_page, page_title) = match &site_config {
-            Some(cfg) => (cfg.home_page.clone(), cfg.page_title.clone()),
-            None => ("index".to_string(), "Home".to_string()),
+        let home_page = match &site_config {
+            Some(cfg) => cfg.home_page.clone(),
+            None => "index".to_string(),
         };
-        let home_slug = home_page.to_lowercase().replace(' ', "-");
-        let index_content = format!(
-            "---\ntitle: \"{}\"\n---\n\n![[{}]]\n",
-            page_title, home_slug
-        );
-        fs::write(&index_path, index_content)?;
-        println!("\nCreated index.md (home: {}, title: {})", home_page, page_title);
+
+        // Try to find and copy the home page content directly
+        let home_file = config.output_dir.join(format!("{}.md", home_page));
+        if home_file.exists() {
+            // Copy home page to index.md (so / shows actual content, not embed)
+            fs::copy(&home_file, &index_path)?;
+            println!("\nCreated index.md (copied from: {})", home_page);
+        } else {
+            // Fallback: create minimal index
+            let index_content = format!(
+                "---\ntitle: \"{}\"\n---\n\n# Welcome\n\nSee [[{}]]\n",
+                home_page, home_page
+            );
+            fs::write(&index_path, index_content)?;
+            println!("\nCreated index.md (home page '{}' not found)", home_page);
+        }
     }
 
     // Step 7: Copy assets

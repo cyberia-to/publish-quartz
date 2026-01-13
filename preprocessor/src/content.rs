@@ -2,13 +2,16 @@ use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 
 use crate::page::PageIndex;
-use crate::query;
 
 lazy_static! {
     // Logseq system properties to remove completely (not user data)
+    // Note: query-properties, query-sort-by, query-sort-desc are handled by query processing
     static ref SYSTEM_PROPS_RE: Regex = Regex::new(
-        r"(?m)^(\s*)(?:-\s*)?(collapsed|logseq\.order-list-type|id|query-table|query-sort-by|query-sort-desc|query-properties):: .+$"
+        r"(?m)^(\s*)(?:-\s*)?(collapsed|logseq\.order-list-type|id|query-table):: .+$"
     ).unwrap();
+
+    // LOGBOOK blocks (time tracking) - remove lines containing :LOGBOOK:, CLOCK:, :END:
+    static ref LOGBOOK_RE: Regex = Regex::new(r"(?m)^\s*(:LOGBOOK:|CLOCK:.*|:END:)\s*$").unwrap();
 
     // User inline properties to convert to readable format (key:: value → **Key:** value)
     static ref USER_PROPS_RE: Regex = Regex::new(
@@ -36,8 +39,8 @@ lazy_static! {
     // Block reference
     static ref BLOCK_REF_RE: Regex = Regex::new(r"\(\(([a-f0-9-]{36})\)\)").unwrap();
 
-    // Query syntax
-    static ref QUERY_RE: Regex = Regex::new(r"(?ms)^(\s*-\s*)?\{\{query[\s\S]*?\}\}").unwrap();
+    // Query syntax - captures indentation and optional list marker
+    static ref QUERY_RE: Regex = Regex::new(r"(?m)^(\s*)(-\s*)?\{\{query[^\}]*\}\}").unwrap();
 
     // YouTube/video/pdf embeds
     static ref YOUTUBE_RE: Regex = Regex::new(r"\{\{youtube\s+([^\}]+)\}\}").unwrap();
@@ -91,12 +94,25 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Remove system properties (not user data)
     result = SYSTEM_PROPS_RE.replace_all(&result, "").to_string();
 
+    // Remove LOGBOOK blocks (time tracking)
+    result = LOGBOOK_RE.replace_all(&result, "").to_string();
+
+    // Execute queries FIRST (before user props transformation destroys query options)
+    result = process_queries_with_options(&result, page_index);
+
     // Convert user inline properties to readable format: key:: value → - **Key:** value
+    // Skip query-* properties as they've been consumed by query processing
     result = USER_PROPS_RE
         .replace_all(&result, |caps: &Captures| {
             let indent = &caps[1];
             let key = &caps[2];
             let value = &caps[3];
+
+            // Skip query options (already processed)
+            if key.starts_with("query-") {
+                return String::new();
+            }
+
             // Convert key-with-dashes to Title Case
             let formatted_key: String = key
                 .split('-')
@@ -160,24 +176,6 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
         })
         .to_string();
 
-    // Execute queries and replace with results
-    result = QUERY_RE
-        .replace_all(&result, |caps: &Captures| {
-            let full_match = &caps[0];
-            let list_marker = caps.get(1).map_or("", |m| m.as_str());
-            let query_str = full_match.trim_start_matches('-').trim();
-
-            let results = query::execute(query_str, page_index);
-            let output = query::results_to_markdown(&results, query_str);
-
-            if list_marker.is_empty() {
-                output
-            } else {
-                format!("{}{}", list_marker, output.replace('\n', &format!("\n{}", list_marker)))
-            }
-        })
-        .to_string();
-
     // Block embed placeholder
     result = BLOCK_EMBED_RE
         .replace_all(&result, "*Block embed - view in Logseq*")
@@ -191,7 +189,8 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Media embeds
     result = YOUTUBE_RE.replace_all(&result, "![$1]($1)").to_string();
     result = VIDEO_RE.replace_all(&result, "![$1]($1)").to_string();
-    result = PDF_RE.replace_all(&result, "![$1]($1)").to_string();
+    // PDF embed - use iframe for embedding
+    result = PDF_RE.replace_all(&result, r#"<iframe src="$1" width="100%" height="600px" style="border: 1px solid #333; border-radius: 4px;"></iframe>"#).to_string();
 
     // Renderer placeholder
     result = RENDERER_RE.replace_all(&result, "`[renderer]`").to_string();
@@ -227,29 +226,179 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     result
 }
 
-/// Convert Logseq hiccup syntax to markdown
+/// Process queries with context-aware options (query-properties::, query-sort-by::, etc.)
+fn process_queries_with_options(content: &str, page_index: &crate::page::PageIndex) -> String {
+    use crate::query;
+
+    let lines: Vec<&str> = content.lines().collect();
+    let mut result_lines: Vec<String> = Vec::new();
+    let mut i = 0;
+
+    while i < lines.len() {
+        let line = lines[i];
+
+        // Check if this line contains a query
+        if let Some(caps) = QUERY_RE.captures(line) {
+            let full_match = &caps[0];
+            let indent = caps.get(1).map_or("", |m| m.as_str());
+            let list_marker = caps.get(2).map_or("", |m| m.as_str());
+            let full_prefix = format!("{}{}", indent, list_marker);
+            let query_str = full_match.trim().trim_start_matches('-').trim();
+
+            // Look at previous lines for query options (within the same block)
+            let mut context = String::new();
+            let mut j = result_lines.len();
+
+            while j > 0 {
+                j -= 1;
+                let prev_line = &result_lines[j];
+                // Stop if we hit an empty line or a line that doesn't look like a property
+                if prev_line.trim().is_empty() {
+                    break;
+                }
+                // Check if it's a query option line
+                if prev_line.contains("query-properties::")
+                    || prev_line.contains("query-sort-by::")
+                    || prev_line.contains("query-sort-desc::")
+                {
+                    context = format!("{}\n{}", prev_line, context);
+                } else {
+                    break;
+                }
+            }
+
+            // Parse options from context
+            let options = query::parse_query_options(&context);
+
+            // Execute query and render results
+            let results = query::execute(query_str, page_index);
+            let output = query::results_to_markdown_with_options(&results, query_str, &options);
+
+            // Format output with proper indentation
+            let formatted_output = if output.contains('|') && output.contains("---") {
+                // Table output - add indentation to each line
+                output
+                    .lines()
+                    .map(|line| format!("{}{}", indent, line))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            } else {
+                // List output - add full prefix (indent + list marker) to each line
+                // If no list marker on the query, use "- " as default
+                let effective_prefix = if list_marker.is_empty() {
+                    format!("{}- ", indent)
+                } else {
+                    full_prefix.clone()
+                };
+                output
+                    .lines()
+                    .map(|line| {
+                        // Strip the "- " prefix from results, then add proper indentation
+                        let content = line.strip_prefix("- ").unwrap_or(line);
+                        format!("{}{}", effective_prefix, content)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+
+            // Replace the query line with output - push each line separately
+            for output_line in formatted_output.lines() {
+                result_lines.push(output_line.to_string());
+            }
+        } else {
+            result_lines.push(line.to_string());
+        }
+
+        i += 1;
+    }
+
+    result_lines.join("\n")
+}
+
+/// Convert Logseq hiccup syntax to HTML
 fn convert_hiccup_to_markdown(content: &str) -> String {
     let mut result = String::new();
+    let mut in_multiline_hiccup = false;
+    let mut hiccup_buffer = String::new();
+    let mut hiccup_indent = String::new();
 
     for line in content.lines() {
         let trimmed = line.trim();
 
-        // Check if line contains hiccup (starts with [: after optional list marker)
-        if trimmed.starts_with("[:") || trimmed.starts_with("- [:") {
-            let hiccup = if trimmed.starts_with("- ") {
+        // Check if this starts a hiccup block
+        if !in_multiline_hiccup && (trimmed.starts_with("[:") || trimmed.starts_with("- [:")) {
+            let hiccup_start = if trimmed.starts_with("- ") {
+                hiccup_indent = line.chars().take_while(|c| c.is_whitespace()).collect();
                 &trimmed[2..]
             } else {
+                hiccup_indent = String::new();
                 trimmed
             };
 
-            // Convert hiccup to markdown
-            let markdown = parse_hiccup_to_markdown(hiccup);
-            result.push_str(&markdown);
-            result.push('\n');
+            // Check if hiccup is complete on one line (balanced brackets)
+            let mut bracket_count = 0;
+            for c in hiccup_start.chars() {
+                match c {
+                    '[' => bracket_count += 1,
+                    ']' => bracket_count -= 1,
+                    _ => {}
+                }
+            }
+
+            if bracket_count == 0 {
+                // Single-line hiccup
+                let html = hiccup_to_html(hiccup_start);
+                result.push_str(&hiccup_indent);
+                // Don't add list marker for block elements
+                if !is_block_element(&html) {
+                    result.push_str("- ");
+                }
+                result.push_str(&html);
+                result.push('\n');
+            } else {
+                // Multi-line hiccup starts
+                in_multiline_hiccup = true;
+                hiccup_buffer = hiccup_start.to_string();
+            }
+        } else if in_multiline_hiccup {
+            // Continue collecting multi-line hiccup
+            hiccup_buffer.push(' ');
+            hiccup_buffer.push_str(trimmed);
+
+            // Check if hiccup is now complete
+            let mut bracket_count = 0;
+            for c in hiccup_buffer.chars() {
+                match c {
+                    '[' => bracket_count += 1,
+                    ']' => bracket_count -= 1,
+                    _ => {}
+                }
+            }
+
+            if bracket_count == 0 {
+                in_multiline_hiccup = false;
+                let html = hiccup_to_html(&hiccup_buffer);
+                result.push_str(&hiccup_indent);
+                // Don't add list marker for block elements
+                if !is_block_element(&html) {
+                    result.push_str("- ");
+                }
+                result.push_str(&html);
+                result.push('\n');
+                hiccup_buffer.clear();
+            }
         } else {
             result.push_str(line);
             result.push('\n');
         }
+    }
+
+    // Handle unclosed hiccup
+    if !hiccup_buffer.is_empty() {
+        result.push_str(&hiccup_indent);
+        result.push_str("- ");
+        result.push_str(&hiccup_to_html(&hiccup_buffer));
+        result.push('\n');
     }
 
     // Remove trailing newline if original didn't have one
@@ -260,93 +409,151 @@ fn convert_hiccup_to_markdown(content: &str) -> String {
     result
 }
 
-/// Parse hiccup structure and convert to markdown (preserving element order)
-fn parse_hiccup_to_markdown(hiccup: &str) -> String {
-    let mut markdown = String::new();
+/// Check if HTML string is a block-level element (shouldn't be wrapped in list)
+fn is_block_element(html: &str) -> bool {
+    html.starts_with("<ul")
+        || html.starts_with("<ol")
+        || html.starts_with("<div")
+        || html.starts_with("<table")
+        || html.starts_with("<h1")
+        || html.starts_with("<h2")
+        || html.starts_with("<h3")
+        || html.starts_with("<h4")
+        || html.starts_with("<blockquote")
+        || html.starts_with("<pre")
+}
 
-    // Collect all elements with their positions
-    let mut elements: Vec<(usize, String)> = Vec::new();
+/// Convert hiccup syntax to HTML
+fn hiccup_to_html(hiccup: &str) -> String {
+    let hiccup = hiccup.trim();
 
-    // Find h2 headers with positions
-    for caps in HICCUP_H2_RE.captures_iter(hiccup) {
-        if let (Some(m), Some(text)) = (caps.get(0), caps.get(1)) {
-            elements.push((m.start(), format!("## {}\n", text.as_str())));
-        }
+    // Parse the tag and check for attributes
+    if !hiccup.starts_with("[:") {
+        return format!("`{}`", hiccup);
     }
 
-    // Find h3 headers with positions
-    for caps in HICCUP_H3_RE.captures_iter(hiccup) {
-        if let (Some(m), Some(text)) = (caps.get(0), caps.get(1)) {
-            elements.push((m.start(), format!("### {}\n", text.as_str())));
-        }
-    }
+    // Extract tag name
+    let after_bracket = &hiccup[2..];
+    let tag_end = after_bracket.find(|c: char| c.is_whitespace() || c == ']').unwrap_or(after_bracket.len());
+    let tag = &after_bracket[..tag_end];
 
-    // Find [:ul ...] blocks and extract their [:li ...] items
-    // We need to find each [:ul and its corresponding [:li items
-    let ul_starts: Vec<usize> = hiccup.match_indices("[:ul").map(|(i, _)| i).collect();
+    // Get the rest (attributes + content)
+    let rest = &after_bracket[tag_end..].trim_end_matches(']').trim();
 
-    for ul_start in ul_starts {
-        // Find the extent of this [:ul block by counting brackets
-        let ul_slice = &hiccup[ul_start..];
-        let mut bracket_count = 0;
-        let mut ul_end = 0;
-
-        for (i, c) in ul_slice.char_indices() {
+    // Check for attributes map {:key "value" ...}
+    let (attrs_html, content_start) = if rest.starts_with('{') {
+        // Find matching closing brace
+        let mut brace_count = 0;
+        let mut attr_end = 0;
+        for (i, c) in rest.char_indices() {
             match c {
-                '[' => bracket_count += 1,
-                ']' => {
-                    bracket_count -= 1;
-                    if bracket_count == 0 {
-                        ul_end = i + 1;
+                '{' => brace_count += 1,
+                '}' => {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        attr_end = i + 1;
                         break;
                     }
                 }
                 _ => {}
             }
         }
+        let attr_str = &rest[1..attr_end - 1]; // Remove { }
+        let attrs = parse_hiccup_attrs(attr_str);
+        (attrs, &rest[attr_end..])
+    } else {
+        (String::new(), *rest)
+    };
 
-        if ul_end > 0 {
-            let ul_content = &ul_slice[..ul_end];
-            // Extract all [:li "..."] from this ul block
-            let mut list_md = String::new();
-            for caps in HICCUP_LI_RE.captures_iter(ul_content) {
+    let content = parse_hiccup_content(content_start);
+
+    // Handle special tags
+    match tag {
+        "ul" | "ol" => {
+            let mut items = Vec::new();
+            for caps in HICCUP_LI_RE.captures_iter(hiccup) {
                 if let Some(text) = caps.get(1) {
-                    list_md.push_str(&format!("- {}\n", text.as_str()));
+                    items.push(format!("<li>{}</li>", text.as_str()));
                 }
             }
-            if !list_md.is_empty() {
-                elements.push((ul_start, list_md));
+            if !items.is_empty() {
+                return format!("<{}{}>{}</{}>", tag, attrs_html, items.join(""), tag);
             }
         }
+        _ => {}
     }
 
-    // Sort by position to maintain order
-    elements.sort_by_key(|(pos, _)| *pos);
+    // Generate HTML
+    if content.is_empty() && attrs_html.is_empty() {
+        format!("<{}/>", tag)
+    } else {
+        format!("<{}{}>{}</{}>", tag, attrs_html, content, tag)
+    }
+}
 
-    // Build markdown output
-    for (_, content) in elements {
-        markdown.push_str(&content);
+/// Parse hiccup attributes {:key "value" :key2 "value2"}
+fn parse_hiccup_attrs(attrs: &str) -> String {
+    lazy_static::lazy_static! {
+        static ref ATTR_RE: Regex = Regex::new(r#":(\w+)\s+"([^"]+)""#).unwrap();
     }
 
-    // If we couldn't extract anything meaningful, show as info callout
-    if markdown.is_empty() {
-        // Extract any quoted strings as fallback
-        let mut texts: Vec<String> = Vec::new();
-        for caps in HICCUP_TEXT_RE.captures_iter(hiccup) {
-            if let Some(text) = caps.get(1) {
-                texts.push(text.as_str().to_string());
-            }
+    let mut result = String::new();
+    for caps in ATTR_RE.captures_iter(attrs) {
+        if let (Some(key), Some(value)) = (caps.get(1), caps.get(2)) {
+            result.push(' ');
+            result.push_str(key.as_str());
+            result.push_str("=\"");
+            result.push_str(value.as_str());
+            result.push('"');
         }
+    }
+    result
+}
 
-        if !texts.is_empty() {
-            markdown.push_str("> [!info] Dynamic Content\n");
-            for text in texts {
-                markdown.push_str(&format!("> {}\n", text));
+/// Parse content inside hiccup element (handles nested elements and strings)
+fn parse_hiccup_content(content: &str) -> String {
+    let content = content.trim();
+    let mut result = String::new();
+    let mut i = 0;
+    let chars: Vec<char> = content.chars().collect();
+
+    while i < chars.len() {
+        if chars[i] == '"' {
+            // Parse quoted string
+            i += 1;
+            let start = i;
+            while i < chars.len() && chars[i] != '"' {
+                i += 1;
             }
+            result.push_str(&chars[start..i].iter().collect::<String>());
+            i += 1; // skip closing quote
+        } else if chars[i] == '[' && i + 1 < chars.len() && chars[i + 1] == ':' {
+            // Parse nested hiccup element
+            let start = i;
+            let mut bracket_count = 0;
+            while i < chars.len() {
+                match chars[i] {
+                    '[' => bracket_count += 1,
+                    ']' => {
+                        bracket_count -= 1;
+                        if bracket_count == 0 {
+                            i += 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            let nested: String = chars[start..i].iter().collect();
+            result.push_str(&hiccup_to_html(&nested));
+        } else if !chars[i].is_whitespace() {
+            // Skip other characters
+            i += 1;
         } else {
-            markdown.push_str("> [!note] Dynamic content - view in Logseq\n");
+            i += 1;
         }
     }
 
-    markdown
+    result
 }

@@ -1,0 +1,35 @@
+tags:: media, embeds, multimedia
+
+- # Media and Embeds
+- This page demonstrates various media embedding features.
+- ## Images
+	- ### Local SVG Image
+		- ![Sample diagram](../assets/diagram.svg)
+	- ### Logo with Size Attributes
+		- ![Logo](../assets/logo.svg){:height 100, :width 200}
+	- ### External Image
+		- ![Placeholder](https://placehold.co/300x200/1a1a2e/4cc38a?text=External+Image)
+- ## YouTube Videos
+	- Embed a YouTube video:
+	- {{youtube https://www.youtube.com/watch?v=dQw4w9WgXcQ}}
+- ## Video Files
+	- Local video embed (file not included in example):
+	- {{video ../assets/demo.mp4}}
+- ## PDF Documents
+	- PDF embed (file not included in example):
+	- {{pdf ../assets/document.pdf}}
+- ## Page Embeds
+	- Embed another page's content:
+	- {{embed [[Getting Started]]}}
+- ## Block Embeds
+	- Embed a specific block (requires valid block UUID):
+	- {{embed ((12345678-abcd-1234-efgh-123456789abc))}}
+- ## Cloze Deletions
+	- For flashcards and spaced repetition:
+	- The capital of France is {{cloze Paris}}.
+	- Water boils at {{cloze 100}} degrees Celsius.
+- ## Renderer Blocks
+	- Custom renderers (plugin-dependent):
+	- {{renderer :custom-plugin, arg1, arg2}}
+- ---
+- Related: [[Syntax Guide]], [[Getting Started]]

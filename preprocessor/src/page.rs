@@ -241,19 +241,22 @@ pub fn process_page(
 }
 
 /// Create stub pages for missing linked pages
-pub fn create_stubs(output_dir: &Path, page_index: &PageIndex) -> Result<usize> {
-    let pages_dir = output_dir.join("pages");
-
-    // Collect all existing files
-    let existing: HashSet<String> = walkdir::WalkDir::new(&pages_dir)
+pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize> {
+    // Collect all existing files from output_dir (content root)
+    let existing: HashSet<String> = walkdir::WalkDir::new(output_dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.path().extension().map_or(false, |ext| ext == "md"))
         .filter_map(|e| {
             e.path()
-                .strip_prefix(&pages_dir)
+                .strip_prefix(output_dir)
                 .ok()
-                .map(|p| p.to_string_lossy().to_lowercase())
+                .map(|p| {
+                    // Normalize: remove .md extension, lowercase, replace spaces with various formats
+                    let s = p.to_string_lossy();
+                    let s = s.trim_end_matches(".md").to_lowercase();
+                    s.to_string()
+                })
         })
         .collect();
 
@@ -280,8 +283,20 @@ pub fn create_stubs(output_dir: &Path, page_index: &PageIndex) -> Result<usize> 
             continue;
         }
 
-        let file_path = format!("{}.md", link.to_lowercase());
-        if existing.contains(&file_path) {
+        // Check if page exists with various name formats
+        let link_lower = link.to_lowercase();
+        let link_normalized = link_lower.replace(' ', "-");
+        let link_with_spaces = link_lower.replace('-', " ");
+
+        if existing.contains(&link_lower)
+            || existing.contains(&link_normalized)
+            || existing.contains(&link_with_spaces)
+            || existing.iter().any(|e| {
+                let e_normalized = e.replace(' ', "-").replace('_', "-");
+                let link_norm = link_lower.replace(' ', "-").replace('_', "-");
+                e_normalized == link_norm
+            })
+        {
             continue;
         }
 
@@ -293,10 +308,22 @@ pub fn create_stubs(output_dir: &Path, page_index: &PageIndex) -> Result<usize> 
             continue;
         }
 
+        // Skip special patterns - $ prefixed pages (including escaped \$), date-like patterns
+        if link.starts_with('$') || link.starts_with("_$") || link.starts_with("\\$") || link.starts_with("_\\$") {
+            continue;
+        }
+        // Skip date patterns like 2024-01-15, 2024_01_15, 2024 01 15
+        if link.len() >= 8 && link.len() <= 12 {
+            let is_date = link.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_' || c == ' ');
+            if is_date {
+                continue;
+            }
+        }
+
         // Sanitize link for filesystem
         let safe_link = link.replace(['/', '\\', ':', '*', '?', '"', '<', '>', '|'], "_");
 
-        let stub_path = pages_dir.join(format!("{}.md", safe_link));
+        let stub_path = output_dir.join(format!("{}.md", safe_link));
         if stub_path.exists() {
             continue;
         }

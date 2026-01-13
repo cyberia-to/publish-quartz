@@ -1,0 +1,21 @@
+tags:: meta, index, documentation, syntax, reference, project, tasks, productivity, queries, advanced, media, embeds, hiccup, edge-cases
+
+- # Tags Used in This Graph
+- ## Content Tags
+	- #documentation - Technical docs
+	- #syntax - Syntax examples
+	- #reference - Reference material
+- ## Organization Tags
+	- #project - Project pages
+	- #tasks - Task management
+	- #productivity - Productivity tips
+- ## Feature Tags
+	- #queries - Query examples
+	- #advanced - Advanced features
+	- #media - Media content
+	- #embeds - Embed examples
+- ## Special Tags
+	- #hiccup - Hiccup/EDN syntax
+	- #edge-cases - Edge case handling
+- ---
+- All pages: [[Getting Started]], [[Syntax Guide]], [[Tasks]], [[Projects/Web App]], [[Queries Demo]], [[Media and Embeds]], [[Hiccup Examples]]

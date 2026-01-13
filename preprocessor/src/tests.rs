@@ -8,34 +8,34 @@ mod path_tests {
     }
 
     #[test]
-    fn test_wikilink_adds_pages_prefix() {
+    fn test_wikilink_preserved() {
         let input = "Check out [[devops]] for more info.";
         let result = content::transform(input, &empty_index());
         assert!(
-            result.contains("[[pages/devops]]"),
-            "Expected pages/ prefix, got: {}",
+            result.contains("[[devops]]"),
+            "Wikilinks should be preserved (pages are at content root), got: {}",
             result
         );
     }
 
     #[test]
-    fn test_wikilink_namespace_gets_prefix() {
+    fn test_wikilink_namespace_preserved() {
         let input = "See [[terrabyte/garden]] for details.";
         let result = content::transform(input, &empty_index());
         assert!(
-            result.contains("[[pages/terrabyte/garden]]"),
-            "Namespace pages should get pages/ prefix, got: {}",
+            result.contains("[[terrabyte/garden]]"),
+            "Namespace pages should be preserved, got: {}",
             result
         );
     }
 
     #[test]
-    fn test_wikilink_preserves_pages_prefix() {
+    fn test_wikilink_strips_pages_prefix() {
         let input = "See [[pages/cyber]] for details.";
         let result = content::transform(input, &empty_index());
         assert!(
-            result.contains("[[pages/cyber]]"),
-            "Should preserve existing pages/ prefix, got: {}",
+            result.contains("[[cyber]]"),
+            "Should strip pages/ prefix (pages are at content root), got: {}",
             result
         );
     }
@@ -56,19 +56,19 @@ mod path_tests {
         let input = "Check [[devops|DevOps Guide]] here.";
         let result = content::transform(input, &empty_index());
         assert!(
-            result.contains("[[pages/devops|DevOps Guide]]"),
-            "Should preserve alias with pages/ prefix, got: {}",
+            result.contains("[[devops|DevOps Guide]]"),
+            "Should preserve alias, got: {}",
             result
         );
     }
 
     #[test]
-    fn test_embed_adds_pages_prefix() {
+    fn test_embed_converted() {
         let input = "{{embed [[intro]]}}";
         let result = content::transform(input, &empty_index());
         assert!(
-            result.contains("![[pages/intro]]"),
-            "Embed should have pages/ prefix, got: {}",
+            result.contains("![[intro]]"),
+            "Embed should convert to ![[]] syntax, got: {}",
             result
         );
     }
@@ -137,28 +137,28 @@ mod path_tests {
     }
 
     #[test]
-    fn test_hiccup_converts_to_markdown() {
+    fn test_hiccup_converts_to_html() {
         let input = r#"- [:div [:h2 "brain state 📊"][:ul [:li "pages: 1,299"][:li "words: 33,951"]][:h3 "Text"][:ul [:li "Blocks: 4,809"]]]"#;
         let result = content::transform(input, &empty_index());
 
-        // Should contain h2 header
+        // Should contain h2 as HTML
         assert!(
-            result.contains("## brain state 📊"),
-            "Should convert h2, got: {}",
+            result.contains("<h2>brain state 📊</h2>"),
+            "Should convert h2 to HTML, got: {}",
             result
         );
 
-        // Should contain h3 header
+        // Should contain h3 as HTML
         assert!(
-            result.contains("### Text"),
-            "Should convert h3, got: {}",
+            result.contains("<h3>Text</h3>"),
+            "Should convert h3 to HTML, got: {}",
             result
         );
 
-        // Should contain list items
+        // Should contain list items as HTML
         assert!(
-            result.contains("- pages: 1,299"),
-            "Should convert list items, got: {}",
+            result.contains("<li>pages: 1,299</li>"),
+            "Should convert list items to HTML, got: {}",
             result
         );
     }
@@ -169,13 +169,13 @@ mod path_tests {
         let result = content::transform(input, &empty_index());
 
         assert!(
-            result.contains("- item 1"),
-            "Should convert list, got: {}",
+            result.contains("<li>item 1</li>"),
+            "Should convert list to HTML, got: {}",
             result
         );
         assert!(
-            result.contains("- item 2"),
-            "Should convert list, got: {}",
+            result.contains("<li>item 2</li>"),
+            "Should convert list to HTML, got: {}",
             result
         );
     }
@@ -560,17 +560,17 @@ mod query_tests {
     }
 
     #[test]
-    fn test_query_results_include_pages_prefix() {
+    fn test_query_results_as_list() {
         let pages = vec![
             create_test_page("my-page", vec!["test"]),
         ];
 
         let results = query::execute("{{query (page-tags [[test]])}}", &pages);
-        let markdown = query::results_to_markdown(&results, "test query");
+        let markdown = query::results_to_markdown_with_options(&results, "test query", &query::QueryOptions::default());
 
         assert!(
-            markdown.contains("[[pages/my-page"),
-            "Results should include pages/ prefix, got: {}",
+            markdown.contains("[[my-page|my-page]]"),
+            "Results should be formatted as links, got: {}",
             markdown
         );
     }

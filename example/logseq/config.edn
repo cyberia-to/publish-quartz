@@ -1,0 +1,34 @@
+{:meta/version 1
+
+ ;; Favorites shown in sidebar
+ :favorites ["Getting Started" "Syntax Guide" "Projects/Web App" "Tasks"]
+
+ ;; Journal configuration
+ :journal/page-title-format "yyyy-MM-dd"
+ :journal/file-name-format "yyyy_MM_dd"
+
+ ;; Default home page
+ :default-home {:page "Getting Started"}
+
+ ;; Feature flags
+ :feature/enable-journals? true
+ :feature/enable-whiteboards? true
+
+ ;; Editor settings
+ :preferred-format :markdown
+ :preferred-workflow :todo
+
+ ;; Publishing settings
+ :publishing/all-pages-public? true
+
+ ;; Custom shortcuts
+ :shortcuts {}
+
+ ;; Default queries for journals
+ :default-queries
+ {:journals
+  [{:title "TODO"
+    :query [:find (pull ?b [*])
+            :where
+            [?b :block/marker ?m]
+            [(contains? #{"TODO" "DOING" "NOW" "LATER"} ?m)]]}]}}

@@ -2,15 +2,32 @@
 
 Convert your Logseq graph to a fast, static Quartz website.
 
+**[Live Example](https://cyberia-to.github.io/publish-quartz/)** - See it in action
+
 Unlike [logseq/publish-spa](https://github.com/logseq/publish-spa) which loads the entire graph JSON on every page visit, this generates individual HTML pages - much faster for large graphs.
 
 ## Features
 
 - Fast Rust preprocessor (~3000 pages in <1 second)
 - Converts Logseq markdown to Quartz-compatible format
-- Handles wikilinks, embeds, queries, properties
+- Handles wikilinks, embeds, queries, properties, tasks
 - Generates backlinks, graph view, search
 - Custom theme with Logseq-style navigation
+
+## Quick Start
+
+Try it locally with the included example graph:
+
+```bash
+git clone https://github.com/cyberia-to/publish-quartz.git
+cd publish-quartz
+nvm use        # Uses .nvmrc (Node 24)
+make serve     # Build and start dev server
+```
+
+Open http://localhost:8080 to see the example site.
+
+**Requirements:** [Rust](https://rustup.rs/) and [Node.js 22+](https://nodejs.org/) (24 recommended)
 
 ## Usage
 
@@ -64,7 +81,7 @@ jobs:
 
 ### Option 2: Local CLI
 
-Requirements: Rust, Node.js 22+
+Process your own Logseq graph:
 
 ```bash
 # Clone this repo
@@ -91,14 +108,11 @@ cp quartz-theme/styles/*.scss quartz-build/quartz/styles/
 cp quartz-theme/components/*.tsx quartz-build/quartz/components/
 cp quartz-theme/scripts/*.ts quartz-build/quartz/components/scripts/
 
-# Build site
-cd quartz-build && npx quartz build
-
-# Preview
-npx quartz build --serve
+# Build and preview
+cd quartz-build && npx quartz build --serve
 ```
 
-### Option 3: Use with existing Logseq repo (like cyber)
+### Option 3: Integrate with your Logseq repo
 
 Add to your Logseq graph's `logseq/config.edn`:
 
@@ -106,7 +120,7 @@ Add to your Logseq graph's `logseq/config.edn`:
 :hidden ["/quartz-build"]
 ```
 
-Create a `Makefile`:
+Create a `Makefile` in your graph repo:
 
 ```makefile
 LIBRARY := ../publish-quartz
@@ -141,13 +155,15 @@ make serve  # Build and preview
 
 | Logseq | Quartz |
 |--------|--------|
-| `[[page]]` | `[[pages/page]]` (wikilink) |
-| `{{embed [[page]]}}` | `![[pages/page]]` (transclusion) |
-| `key:: value` | YAML frontmatter |
-| `{{query ...}}` | Executed and rendered as list |
-| `NOW/LATER/TODO/DONE` | Checkbox markers |
+| `[[page]]` | Wikilink |
+| `{{embed [[page]]}}` | Transclusion |
+| `key:: value` | YAML frontmatter / inline display |
+| `{{query ...}}` | Executed at build time, rendered as list/table |
+| `TODO/DOING/DONE/LATER` | Checkbox markers with icons |
+| `[#A]` `[#B]` `[#C]` | Priority indicators |
+| `SCHEDULED:` `DEADLINE:` | Date badges |
 | `((block-ref))` | Blockquote with link |
-| `[:div ...]` (Hiccup) | Code block |
+| `[:div ...]` (Hiccup) | Converted to HTML |
 
 ## Configuration
 
@@ -155,6 +171,10 @@ Edit `quartz-theme/quartz.config.ts` to customize:
 - Site title, base URL
 - Theme colors
 - Enabled plugins
+
+Logseq config options read from `logseq/config.edn`:
+- `:favorites` - Pinned pages in sidebar
+- `:default-home` - Home page
 
 ## License
 

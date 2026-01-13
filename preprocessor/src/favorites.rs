@@ -37,13 +37,18 @@ pub fn process_favorites(
 
     let mut count = 0;
     for fav in &favorites {
-        // Page files use lowercase names with spaces preserved
-        let page_filename = fav.to_lowercase();
         let slug = slugify(fav);
 
-        // Check if page exists (with original spacing)
-        let page_path = pages_output.join(format!("{}.md", page_filename));
+        // Check if page exists - try original name first, then with namespace separator
+        let page_path = if fav.contains('/') {
+            // Namespace page like "Projects/Web App" -> "Projects/Web App.md"
+            pages_output.join(format!("{}.md", fav))
+        } else {
+            pages_output.join(format!("{}.md", fav))
+        };
+
         if !page_path.exists() {
+            eprintln!("Favorite page not found: {:?}", page_path);
             continue;
         }
 
@@ -56,7 +61,7 @@ pub fn process_favorites(
             "---\ntitle: \"{}{}\"\n---\n\n![[{}]]\n",
             if icon.is_empty() { String::new() } else { format!("{} ", icon) },
             fav,
-            page_filename
+            fav  // Use original name for embed link
         );
 
         fs::write(&fav_path, fav_content)?;
