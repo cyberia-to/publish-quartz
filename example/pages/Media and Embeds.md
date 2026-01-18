@@ -16,8 +16,12 @@ tags:: media, embeds, multimedia
 	- Local video embed (file not included in example):
 	- {{video ../assets/demo.mp4}}
 - ## PDF Documents
-	- PDF embed (file not included in example):
-	- {{pdf ../assets/document.pdf}}
+	- ### Logseq PDF Syntax
+		- PDF embed using Logseq's native syntax (file not included in example):
+		- {{pdf ../assets/document.pdf}}
+	- ### Image Syntax for PDFs
+		- Logseq sometimes uses image syntax for PDFs. The preprocessor converts this to an iframe:
+		- ![document.pdf](../assets/document.pdf)
 - ## Page Embeds
 	- Embed another page's content:
 	- {{embed [[Getting Started]]}}

@@ -78,6 +78,13 @@ alias:: Markdown Guide, Syntax Reference
 		  | local overpopulation | staking mechanism for residentship |
 		  | no collective insurance | capital driven basic income |
 		  | broken ecology | automated slashing driven by sensor network |
+	- ### Table with Many Columns (Logseq Style)
+		- This table has 9 columns but Logseq generated a 3-column separator. The preprocessor fixes this automatically.
+		- | Aspect | No | Parameter | Site A | Site B | Site C | Site D | Site E | Site F |
+		  | ---- | ---- | ---- |
+		  | Metals | 1 | Lead (Pb) | 29.3 | 29.3 | 29.0 | 28.4 | 31.2 | 30.5 |
+		  | Metals | 2 | Copper (Cu) | 1.2 | 0.8 | 0.9 | 16.5 | 17.0 | 20.2 |
+		  | Metals | 3 | Iron (Fe) | 30.7 | 35.0 | 6.8 | 8498.4 | 5452.5 | 10409.3 |
 - ## Blockquotes
 	- > This is a blockquote.
 	  > It can span multiple lines.

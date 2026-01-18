@@ -711,3 +711,148 @@ mod query_tests {
         assert_eq!(results2[0].name, "page2");
     }
 }
+
+#[cfg(test)]
+mod table_and_pdf_tests {
+    use crate::content;
+    use crate::page::PageIndex;
+
+    fn empty_index() -> PageIndex {
+        Vec::new()
+    }
+
+    // ===========================================
+    // Table Tests
+    // ===========================================
+
+    #[test]
+    fn test_table_with_malformed_separator_fewer_columns() {
+        // Logseq sometimes has separator rows with fewer columns than the header
+        // The fix should detect this and generate a correct separator
+        let input = r#"- | Col1 | Col2 | Col3 | Col4 | Col5 |
+  | ---- | ---- |
+  | val1 | val2 | val3 | val4 | val5 |"#;
+
+        let result = content::transform(input, &empty_index());
+
+        // Should have a 5-column separator, not the malformed 2-column one
+        assert!(
+            result.contains("|---|---|---|---|---|"),
+            "Should generate correct 5-column separator, got: {}",
+            result
+        );
+        // The malformed separator should be removed
+        assert!(
+            !result.contains("| ---- | ---- |"),
+            "Should remove malformed 2-column separator, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_table_with_correct_separator_unchanged() {
+        // Tables with correct separators should be left unchanged
+        let input = r#"- | Col1 | Col2 | Col3 |
+  |------|------|------|
+  | val1 | val2 | val3 |"#;
+
+        let result = content::transform(input, &empty_index());
+
+        // Should preserve the existing correct separator
+        assert!(
+            result.contains("|------|------|------|"),
+            "Should preserve correct separator, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_table_9_columns_with_3_column_separator() {
+        // Real-world test case: 9-column table with 3-column separator (from Logseq)
+        let input = r#"- | Aspect | No | Parameters | Col4 | Col5 | Col6 | Col7 | Col8 | Col9 |
+  | ---- | ---- | ---- |
+  | Heavy Metals | 1 | Lead (Pb) | 29.318 | 29.328 | 29.032 | 28.365 | 31.165 | 30.454 |"#;
+
+        let result = content::transform(input, &empty_index());
+
+        // Should have a 9-column separator
+        assert!(
+            result.contains("|---|---|---|---|---|---|---|---|---|"),
+            "Should generate correct 9-column separator, got: {}",
+            result
+        );
+        // Data row should be preserved
+        assert!(
+            result.contains("| Heavy Metals | 1 | Lead (Pb) |"),
+            "Should preserve data rows, got: {}",
+            result
+        );
+    }
+
+    // ===========================================
+    // PDF Image Syntax Tests
+    // ===========================================
+
+    #[test]
+    fn test_pdf_image_syntax_converted_to_iframe() {
+        // Logseq uses image syntax for PDFs: ![name.pdf](path.pdf)
+        let input = "- ![document.pdf](../assets/document.pdf)";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains(r#"<iframe src="../assets/document.pdf" width="100%" height="600px"#),
+            "PDF image syntax should convert to iframe, got: {}",
+            result
+        );
+        // Should not contain the original image syntax
+        assert!(
+            !result.contains("![document.pdf]"),
+            "Should not contain original image syntax, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_pdf_image_syntax_with_empty_alt() {
+        // PDF with empty alt text: ![](path.pdf)
+        let input = "- ![](../assets/report.pdf)";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains(r#"<iframe src="../assets/report.pdf" width="100%" height="600px"#),
+            "PDF with empty alt should convert to iframe, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_pdf_logseq_syntax_still_works() {
+        // Original {{pdf ...}} syntax should still work
+        let input = "- {{pdf ../assets/document.pdf}}";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains(r#"<iframe src="../assets/document.pdf" width="100%" height="600px"#),
+            "{{pdf}} syntax should convert to iframe, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_regular_image_not_converted_to_iframe() {
+        // Regular images should not be converted to iframes
+        let input = "- ![photo.png](../assets/photo.png)";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("![photo.png](../assets/photo.png)"),
+            "Regular images should remain unchanged, got: {}",
+            result
+        );
+        assert!(
+            !result.contains("<iframe"),
+            "Regular images should not become iframes, got: {}",
+            result
+        );
+    }
+}

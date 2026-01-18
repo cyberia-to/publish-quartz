@@ -47,6 +47,8 @@ lazy_static! {
     static ref YOUTUBE_RE: Regex = Regex::new(r"\{\{youtube\s+([^\}]+)\}\}").unwrap();
     static ref VIDEO_RE: Regex = Regex::new(r"\{\{video\s+([^\}]+)\}\}").unwrap();
     static ref PDF_RE: Regex = Regex::new(r"\{\{pdf\s+([^\}]+)\}\}").unwrap();
+    // PDF files embedded using image syntax ![name.pdf](path.pdf) or ![](path.pdf)
+    static ref IMAGE_PDF_RE: Regex = Regex::new(r"!\[[^\]]*\]\(([^\)]+\.pdf)\)").unwrap();
 
     // Renderer
     static ref RENDERER_RE: Regex = Regex::new(r"\{\{renderer\s+[^\}]+\}\}").unwrap();
@@ -190,6 +192,8 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     result = VIDEO_RE.replace_all(&result, "![$1]($1)").to_string();
     // PDF embed - use iframe for embedding
     result = PDF_RE.replace_all(&result, r#"<iframe src="$1" width="100%" height="600px" style="border: 1px solid #333; border-radius: 4px;"></iframe>"#).to_string();
+    // PDF embedded as image syntax ![name.pdf](path.pdf) - also convert to iframe
+    result = IMAGE_PDF_RE.replace_all(&result, r#"<iframe src="$1" width="100%" height="600px" style="border: 1px solid #333; border-radius: 4px;"></iframe>"#).to_string();
 
     // Renderer placeholder
     result = RENDERER_RE.replace_all(&result, "`[renderer]`").to_string();
@@ -605,18 +609,25 @@ fn fix_tables(content: &str) -> String {
                 }
             }
 
-            // Check if table has a separator row
-            let has_separator = table_contents.iter().any(|line| {
-                is_separator_row(line)
+            // Check if table has a valid separator row with correct column count
+            let header_col_count = table_contents[0].matches('|').count().saturating_sub(1);
+            let has_valid_separator = table_contents.iter().any(|line| {
+                if is_separator_row(line) {
+                    // Separator must have same column count as header
+                    let sep_col_count = line.matches('|').count().saturating_sub(1);
+                    sep_col_count == header_col_count
+                } else {
+                    false
+                }
             });
 
             // Output table with separator if needed
             // First row (header)
             result.push(table_lines[0].clone());
 
-            // Add separator after first row if missing
-            if !has_separator && table_contents.len() > 1 {
-                let col_count = table_contents[0].matches('|').count().saturating_sub(1);
+            // Add separator after first row if missing or invalid
+            if !has_valid_separator && table_contents.len() > 1 {
+                let col_count = header_col_count;
                 if col_count > 0 {
                     // Use same indentation as continuation lines (without the "- ")
                     let continuation_prefix = get_continuation_prefix(&first_line_prefix);
@@ -625,8 +636,16 @@ fn fix_tables(content: &str) -> String {
                 }
             }
 
-            // Add remaining rows
-            for table_line in table_lines.iter().skip(1) {
+            // Add remaining rows, skipping malformed separator rows
+            for (idx, table_line) in table_lines.iter().skip(1).enumerate() {
+                let content = &table_contents[idx + 1];
+                // Skip separator rows with wrong column count (malformed)
+                if is_separator_row(content) {
+                    let sep_col_count = content.matches('|').count().saturating_sub(1);
+                    if sep_col_count != header_col_count {
+                        continue; // Skip malformed separator
+                    }
+                }
                 result.push(table_line.clone());
             }
         } else {
