@@ -1,8 +1,48 @@
 # Changelog
 
-## [0.3.4] - 2025-01-13
+## [0.3.9] - 2025-01-18
 
 ### Fixed
+- Dollar signs in wikilink aliases now escaped for LaTeX compatibility
+- `[[$TOCYB]]` resolving to `$C` now displays correctly as `[[$C|\$TOCYB]]`
+- Simple wikilinks like `[[$V]]` remain unescaped for proper page matching
+
+### Added
+- CI now runs tests before building release binaries
+- Pre-commit hook runs `cargo test` before commits
+- `make setup-hooks` command to install git hooks after cloning
+
+## [0.3.8] - 2025-01-18
+
+### Fixed
+- Wikilinks to pages with `$` in name now work correctly (e.g., `[[$V]]` → `$V.md`)
+- Dollar signs in text are escaped for LaTeX (`$100` → `\$100`)
+- Wikilinks are protected from dollar escaping using placeholder strategy
+
+## [0.3.7] - 2025-01-18
+
+### Fixed
+- Currency amounts now escaped for LaTeX compatibility (`$100`, `$50,000`)
+- Currency with suffixes also escaped (`$10k`, `$7M`, `$100k`)
+
+## [0.3.6] - 2025-01-18
+
+### Added
+- Alias resolution for wikilinks (e.g., `[[cv/districts]]` resolves via page aliases)
+- Namespace alias expansion (`cv/X` expands to `cyber valley/X` when `cv` is alias)
+- Four-level matching: exact page → exact alias → namespace expansion → prefix match
+
+## [0.3.5] - 2025-01-18
+
+### Added
+- Wikilink prefix matching (`[[visit us]]` matches `visit` page if exact match not found)
+- Markdown link with wikilink URL support: `[text]([[Page]])` → `[text](Page)`
+
+## [0.3.4] - 2025-01-18
+
+### Fixed
+- Table separator validation now checks column count matches header
+- PDF files with image syntax `![name.pdf](path.pdf)` now render as iframes
 - CSS and assets now load correctly on GitHub Pages subdirectory deployments
 - Added `<base>` tag for subdirectory deployments to fix relative path resolution
 - Fixes 404 errors for `index.css`, `prescript.js`, etc. when deployed to `username.github.io/repo/`

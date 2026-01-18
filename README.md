@@ -29,6 +29,19 @@ Open http://localhost:8080 to see the example site.
 
 **Requirements:** [Rust](https://rustup.rs/) and [Node.js 22+](https://nodejs.org/) (24 recommended)
 
+## Development
+
+```bash
+# Install git hooks (runs tests before each commit)
+make setup-hooks
+
+# Run tests
+make test
+
+# Build preprocessor
+make build-preprocessor
+```
+
 ## Usage
 
 ### Option 1: GitHub Action
@@ -155,15 +168,22 @@ make serve  # Build and preview
 
 | Logseq | Quartz |
 |--------|--------|
-| `[[page]]` | Wikilink |
+| `[[page]]` | Wikilink with alias resolution |
+| `[[$TOKEN]]` | Links to pages with $ in name |
 | `{{embed [[page]]}}` | Transclusion |
 | `key:: value` | YAML frontmatter / inline display |
+| `alias:: name` | Page aliases for wikilink resolution |
 | `{{query ...}}` | Executed at build time, rendered as list/table |
+| `{{youtube URL}}` | Embedded video |
+| `{{pdf URL}}` | Embedded PDF iframe |
+| `![doc.pdf](path.pdf)` | Embedded PDF iframe |
 | `TODO/DOING/DONE/LATER` | Checkbox markers with icons |
 | `[#A]` `[#B]` `[#C]` | Priority indicators |
 | `SCHEDULED:` `DEADLINE:` | Date badges |
 | `((block-ref))` | Blockquote with link |
 | `[:div ...]` (Hiccup) | Converted to HTML |
+| Tables in bullets | Proper markdown tables |
+| `$100`, `$TOKEN` | Escaped for LaTeX compatibility |
 
 ## Configuration
 
