@@ -21,7 +21,7 @@ OUTPUT_DIR := public
 # Binaries
 PREPROCESSOR := $(PREPROCESSOR_DIR)/target/release/logseq-to-quartz
 
-.PHONY: all check-node build-preprocessor setup-quartz preprocess copy-theme build serve clean help example
+.PHONY: all check-node build-preprocessor setup-quartz preprocess copy-theme build serve clean help example setup-hooks
 
 # Default target
 all: example
@@ -105,6 +105,10 @@ clean-content:
 test:
 	cd $(PREPROCESSOR_DIR) && cargo test
 
+# Install git hooks (run once after cloning)
+setup-hooks:
+	@./scripts/setup-hooks.sh
+
 # Watch mode - reprocess on changes (requires entr: brew install entr)
 watch-content:
 	@echo "Watching $(EXAMPLE_DIR) for changes... (Ctrl+C to stop)"
@@ -170,6 +174,7 @@ help:
 	@echo "Other:"
 	@echo "  build-preprocessor  Build the Rust preprocessor"
 	@echo "  setup-quartz     Clone and setup Quartz framework"
+	@echo "  setup-hooks      Install git pre-commit hooks"
 	@echo "  preprocess       Run preprocessor on example graph"
 	@echo "  copy-theme       Copy theme files to Quartz"
 	@echo "  test             Run preprocessor tests"

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Pre-commit hook: run preprocessor tests before committing
+
+echo "Running preprocessor tests..."
+
+# Get the repo root
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT/preprocessor"
+
+if ! cargo test --quiet; then
+    echo "❌ Tests failed. Commit aborted."
+    exit 1
+fi
+
+echo "✓ All tests passed."
+exit 0
