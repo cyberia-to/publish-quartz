@@ -519,6 +519,7 @@ mod query_tests {
             content: String::new(),
             properties: HashMap::new(),
             tags: tags.into_iter().map(|s| s.to_string()).collect(),
+            aliases: vec![],
             namespace: None,
             modified: None,
             created: None,
@@ -861,12 +862,17 @@ mod table_and_pdf_tests {
     // ===========================================
 
     fn create_page(name: &str) -> crate::page::Page {
+        create_page_with_aliases(name, vec![])
+    }
+
+    fn create_page_with_aliases(name: &str, aliases: Vec<&str>) -> crate::page::Page {
         crate::page::Page {
             name: name.to_string(),
             name_lower: name.to_lowercase(),
             tags: vec![],
             properties: std::collections::HashMap::new(),
             content: String::new(),
+            aliases: aliases.into_iter().map(|s| s.to_string()).collect(),
             namespace: None,
             modified: None,
             created: None,
@@ -980,6 +986,124 @@ mod table_and_pdf_tests {
         assert!(
             !result.contains("[[Tasks]]"),
             "Should not contain wikilink syntax in URL, got: {}",
+            result
+        );
+    }
+
+    // ===========================================
+    // Alias Resolution Tests
+    // ===========================================
+
+    #[test]
+    fn test_alias_exact_match() {
+        // Link "cv/districts" should match page with alias "cv/districts"
+        let page_index = vec![
+            create_page_with_aliases("cyber valley/districts", vec!["cv/districts"]),
+            create_page("other page"),
+        ];
+        let input = "- Discover [[cv/districts]] here";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[cyber valley/districts|cv/districts]]"),
+            "Should resolve alias to page name, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_alias_simple_match() {
+        // Link "cv" should match page "cyber valley" with alias "cv"
+        let page_index = vec![
+            create_page_with_aliases("cyber valley", vec!["cv", "about"]),
+            create_page("other"),
+        ];
+        let input = "- Visit [[cv]] today";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[cyber valley|cv]]"),
+            "Should resolve alias 'cv' to 'cyber valley', got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_namespace_alias_expansion() {
+        // Link "cv/districts" where "cv" is alias for "cyber valley"
+        // should match "cyber valley/districts"
+        let page_index = vec![
+            create_page_with_aliases("cyber valley", vec!["cv"]),
+            create_page("cyber valley/districts"),
+        ];
+        let input = "- Discover [[cv/districts]] here";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[cyber valley/districts|cv/districts]]"),
+            "Should expand namespace alias, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_alias_does_not_override_exact_page() {
+        // If both page "cv" and alias "cv" exist, page should win
+        let page_index = vec![
+            create_page("cv"),
+            create_page_with_aliases("cyber valley", vec!["cv"]),
+        ];
+        let input = "- Visit [[cv]] today";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[cv]]"),
+            "Exact page match should take priority over alias, got: {}",
+            result
+        );
+        assert!(
+            !result.contains("[[cyber valley|cv]]"),
+            "Should not rewrite when exact page exists, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_multiple_aliases() {
+        // Page with multiple aliases
+        let page_index = vec![
+            create_page_with_aliases("visit", vec!["residency", "come visit"]),
+        ];
+
+        let input1 = "- Check [[residency]] options";
+        let result1 = content::transform(input1, &page_index);
+        assert!(
+            result1.contains("[[visit|residency]]"),
+            "Should resolve first alias, got: {}",
+            result1
+        );
+
+        let input2 = "- Please [[come visit]] us";
+        let result2 = content::transform(input2, &page_index);
+        assert!(
+            result2.contains("[[visit|come visit]]"),
+            "Should resolve second alias, got: {}",
+            result2
+        );
+    }
+
+    #[test]
+    fn test_alias_case_insensitive() {
+        // Alias matching should be case-insensitive
+        let page_index = vec![
+            create_page_with_aliases("Cyber Valley", vec!["CV"]),
+        ];
+        let input = "- Visit [[cv]] today";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[Cyber Valley|cv]]"),
+            "Alias matching should be case-insensitive, got: {}",
             result
         );
     }

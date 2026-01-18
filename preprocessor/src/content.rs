@@ -710,13 +710,17 @@ fn get_continuation_prefix(first_prefix: &str) -> String {
     }
 }
 
-/// Find the best matching page for a wikilink using prefix matching
-/// e.g., "visit us" matches "visit" if "visit" exists but "visit us" doesn't
+/// Find the best matching page for a wikilink using alias and prefix matching
+/// Handles:
+/// 1. Exact page name match
+/// 2. Exact alias match (e.g., "cv/districts" matches page with alias "cv/districts")
+/// 3. Namespace alias expansion (e.g., "cv/districts" → "cyber valley/districts" if "cv" is alias for "cyber valley")
+/// 4. Prefix matching (e.g., "visit us" matches "visit" if "visit us" doesn't exist)
 fn find_best_page_match<'a>(link: &'a str, page_index: &[crate::page::Page]) -> &'a str {
     let link_lower = link.to_lowercase();
     let link_normalized = link_lower.replace(' ', "-").replace('_', "-");
 
-    // First check for exact match
+    // 1. Check for exact page name match
     for page in page_index {
         let page_name = page.name.to_lowercase();
         let page_normalized = page_name.replace(' ', "-").replace('_', "-");
@@ -726,8 +730,56 @@ fn find_best_page_match<'a>(link: &'a str, page_index: &[crate::page::Page]) -> 
         }
     }
 
-    // No exact match - try prefix matching
-    // Find the longest matching page name that is a prefix of the link
+    // 2. Check for exact alias match
+    for page in page_index {
+        for alias in &page.aliases {
+            let alias_lower = alias.to_lowercase();
+            let alias_normalized = alias_lower.replace(' ', "-").replace('_', "-");
+
+            if alias_lower == link_lower || alias_normalized == link_normalized {
+                // Found alias match - return the page name
+                return Box::leak(page.name.clone().into_boxed_str());
+            }
+        }
+    }
+
+    // 3. Namespace alias expansion: if link is "prefix/suffix", check if "prefix" is an alias
+    if link.contains('/') {
+        let parts: Vec<&str> = link.splitn(2, '/').collect();
+        if parts.len() == 2 {
+            let prefix = parts[0];
+            let suffix = parts[1];
+            let prefix_lower = prefix.to_lowercase();
+
+            // Find what page "prefix" is an alias for
+            for page in page_index {
+                for alias in &page.aliases {
+                    if alias.to_lowercase() == prefix_lower {
+                        // Found: prefix is alias for page.name
+                        // Now look for "page.name/suffix"
+                        let expanded_link = format!("{}/{}", page.name, suffix);
+                        let expanded_lower = expanded_link.to_lowercase();
+
+                        // Check if expanded link matches any page
+                        for target_page in page_index {
+                            let target_name = target_page.name.to_lowercase();
+                            if target_name == expanded_lower {
+                                return Box::leak(target_page.name.clone().into_boxed_str());
+                            }
+                            // Also check aliases of target page
+                            for target_alias in &target_page.aliases {
+                                if target_alias.to_lowercase() == link_lower {
+                                    return Box::leak(target_page.name.clone().into_boxed_str());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Prefix matching: "visit us" matches "visit" if "visit" exists
     let mut best_match: Option<&str> = None;
     let mut best_len = 0;
 
@@ -749,11 +801,8 @@ fn find_best_page_match<'a>(link: &'a str, page_index: &[crate::page::Page]) -> 
         }
     }
 
-    // Return the best match (with original case from page_index) or original link
+    // Return the best match or original link
     if let Some(matched) = best_match {
-        // We need to return a reference with the same lifetime as the input
-        // Since we're returning the matched page name, we leak a small string
-        // This is acceptable as the number of unique rewrites is bounded
         Box::leak(matched.to_string().into_boxed_str())
     } else {
         link

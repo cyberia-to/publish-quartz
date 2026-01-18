@@ -16,6 +16,7 @@ pub struct Page {
     pub content: String,
     pub properties: HashMap<String, String>,
     pub tags: Vec<String>,
+    pub aliases: Vec<String>,
     pub namespace: Option<String>,
     pub modified: Option<String>,
     pub created: Option<String>,
@@ -64,6 +65,7 @@ fn parse_page_for_index(
 
     let (properties, _remaining) = parse_properties(&content);
     let tags = extract_tags(&properties, &content);
+    let aliases = extract_aliases(&properties);
 
     // Get git dates from batch lookup
     let relative_path = path.strip_prefix(repo_root)
@@ -80,6 +82,7 @@ fn parse_page_for_index(
         content,
         properties,
         tags,
+        aliases,
         namespace,
         modified,
         created,
@@ -147,6 +150,25 @@ fn extract_tags(properties: &HashMap<String, String>, content: &str) -> Vec<Stri
     }
 
     tags
+}
+
+/// Extract aliases from properties
+fn extract_aliases(properties: &HashMap<String, String>) -> Vec<String> {
+    let mut aliases = Vec::new();
+
+    if let Some(alias_str) = properties.get("alias") {
+        for alias in alias_str.split(',') {
+            let alias = alias.trim()
+                .trim_start_matches("[[")
+                .trim_end_matches("]]")
+                .to_string();
+            if !alias.is_empty() {
+                aliases.push(alias);
+            }
+        }
+    }
+
+    aliases
 }
 
 /// Get all git dates in batch (much faster than per-file)
