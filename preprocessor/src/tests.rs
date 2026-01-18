@@ -1174,4 +1174,44 @@ mod table_and_pdf_tests {
             result
         );
     }
+
+    #[test]
+    fn test_wikilink_dollar_not_escaped() {
+        // Dollar signs inside wikilinks should NOT be escaped
+        // Page names like $BOOT.md need the wikilink to match exactly
+        let input = "- [[$BOOT]] is the token and [[$V]] is will";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("[[$BOOT]]") && result.contains("[[$V]]"),
+            "Dollar signs in wikilinks should NOT be escaped, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_dollar_token_outside_wikilink_escaped() {
+        // Dollar signs OUTSIDE wikilinks should be escaped
+        let input = "- Use $BOOT for staking, see [[$BOOT]] for details";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("\\$BOOT for staking") && result.contains("[[$BOOT]]"),
+            "Dollar in text escaped, in wikilink not, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_embed_wikilink_dollar_not_escaped() {
+        // Embed syntax ![[...]] should also preserve dollar signs
+        let input = "- ![[Finalization of $BOOT distribution]]";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("$BOOT"),
+            "Dollar signs in embed wikilinks should NOT be escaped, got: {}",
+            result
+        );
+    }
 }

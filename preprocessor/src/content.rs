@@ -25,9 +25,6 @@ lazy_static! {
     // Empty bullet lines (just "- " or "-" with optional whitespace)
     static ref EMPTY_BULLET_RE: Regex = Regex::new(r"(?m)^(\s*)-\s*$").unwrap();
 
-    // Wikilinks with $ signs
-    static ref WIKILINK_DOLLAR_RE: Regex = Regex::new(r"\[\[([^\]]*\$[^\]]*)\]\]").unwrap();
-
     // Standalone $ tokens (matches $TOKEN patterns)
     static ref DOLLAR_TOKEN_RE: Regex = Regex::new(r"(^|[^\\])\$([A-Z][A-Z0-9]*)").unwrap();
 
@@ -145,31 +142,9 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Fix tables - extract from bullet points and format as proper markdown tables
     result = fix_tables(&result);
 
-    // Escape $ in wikilinks
-    result = WIKILINK_DOLLAR_RE
-        .replace_all(&result, |caps: &Captures| {
-            let inner = &caps[1];
-            format!("[[{}]]", inner.replace('$', "\\$"))
-        })
-        .to_string();
-
-    // Escape standalone $ tokens (preserve char before $, skip if already escaped)
-    result = DOLLAR_TOKEN_RE
-        .replace_all(&result, |caps: &Captures| {
-            let prefix = &caps[1]; // char before $ or empty at start
-            let token = &caps[2];  // the TOKEN part
-            format!("{}\\${}", prefix, token)
-        })
-        .to_string();
-
-    // Escape currency patterns like $100, $50,000 (preserve char before $)
-    result = DOLLAR_CURRENCY_RE
-        .replace_all(&result, |caps: &Captures| {
-            let prefix = &caps[1];
-            let amount = &caps[2];
-            format!("{}\\${}", prefix, amount)
-        })
-        .to_string();
+    // Escape $ signs for LaTeX compatibility, but NOT inside wikilinks
+    // Strategy: protect wikilinks with placeholders, escape $, restore wikilinks
+    result = escape_dollars_outside_wikilinks(&result);
 
     // Convert embeds
     result = EMBED_RE.replace_all(&result, "![[$1]]").to_string();
@@ -252,6 +227,51 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     result = DEADLINE_RE
         .replace_all(&result, "⏰ Deadline: $1")
         .to_string();
+
+    result
+}
+
+/// Escape dollar signs for LaTeX compatibility, but NOT inside wikilinks
+/// Wikilinks like [[$BOOT]] must keep $ unescaped to match page names
+fn escape_dollars_outside_wikilinks(content: &str) -> String {
+    // Regex to match wikilinks (including embeds like ![[...]])
+    lazy_static::lazy_static! {
+        static ref WIKILINK_PLACEHOLDER_RE: Regex = Regex::new(r"(!?\[\[[^\]]+\]\])").unwrap();
+    }
+
+    // Step 1: Extract wikilinks and replace with placeholders
+    let mut placeholders: Vec<String> = Vec::new();
+    let protected = WIKILINK_PLACEHOLDER_RE.replace_all(content, |caps: &Captures| {
+        let wikilink = caps[1].to_string();
+        let placeholder = format!("\x00WIKILINK{}\x00", placeholders.len());
+        placeholders.push(wikilink);
+        placeholder
+    }).to_string();
+
+    // Step 2: Escape $ tokens (like $HOME, $BOOT) - uppercase tokens
+    let escaped = DOLLAR_TOKEN_RE
+        .replace_all(&protected, |caps: &Captures| {
+            let prefix = &caps[1];
+            let token = &caps[2];
+            format!("{}\\${}", prefix, token)
+        })
+        .to_string();
+
+    // Step 3: Escape currency patterns (like $100, $10k)
+    let escaped = DOLLAR_CURRENCY_RE
+        .replace_all(&escaped, |caps: &Captures| {
+            let prefix = &caps[1];
+            let amount = &caps[2];
+            format!("{}\\${}", prefix, amount)
+        })
+        .to_string();
+
+    // Step 4: Restore wikilinks from placeholders
+    let mut result = escaped;
+    for (i, wikilink) in placeholders.iter().enumerate() {
+        let placeholder = format!("\x00WIKILINK{}\x00", i);
+        result = result.replace(&placeholder, wikilink);
+    }
 
     result
 }
