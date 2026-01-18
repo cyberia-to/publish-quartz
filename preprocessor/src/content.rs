@@ -171,10 +171,16 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
             let final_link = find_best_page_match(clean_link, page_index);
 
             // If we found a different page and there's no alias, add the original as alias
+            // Escape $ in display text to prevent LaTeX interpretation
             if final_link != clean_link && alias.is_empty() {
-                format!("{}[[{}|{}]]", embed, final_link, clean_link)
+                let display_text = clean_link.replace('$', "\\$");
+                format!("{}[[{}|{}]]", embed, final_link, display_text)
+            } else if !alias.is_empty() {
+                // Existing alias - escape $ in it too
+                let escaped_alias = alias.replace('$', "\\$");
+                format!("{}[[{}{}]]", embed, final_link, escaped_alias)
             } else {
-                format!("{}[[{}{}]]", embed, final_link, alias)
+                format!("{}[[{}]]", embed, final_link)
             }
         })
         .to_string();

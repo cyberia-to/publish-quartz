@@ -1214,4 +1214,38 @@ mod table_and_pdf_tests {
             result
         );
     }
+
+    #[test]
+    fn test_alias_dollar_sign_escaped_in_display() {
+        // When alias resolution creates [[Page|Display]], $ in Display should be escaped
+        // This prevents LaTeX from interpreting $Page|$Display as math
+        let page_index = vec![
+            create_page_with_aliases("$C", vec!["$TOCYB"]),
+        ];
+        let input = "- [[$TOCYB]] is a token";
+        let result = content::transform(input, &page_index);
+
+        // Should link to $C (unescaped) with display \$TOCYB (escaped)
+        assert!(
+            result.contains("[[$C|\\$TOCYB]]"),
+            "Alias display text should have escaped $, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_simple_dollar_wikilink_not_escaped() {
+        // Simple wikilinks to $ pages should NOT be escaped
+        let page_index = vec![
+            create_page("$V"),
+        ];
+        let input = "- [[$V]] is will";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[$V]]"),
+            "Simple $ wikilinks should not be escaped, got: {}",
+            result
+        );
+    }
 }
