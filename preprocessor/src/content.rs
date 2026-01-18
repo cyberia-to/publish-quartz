@@ -31,6 +31,9 @@ lazy_static! {
     // Standalone $ tokens (matches $TOKEN patterns)
     static ref DOLLAR_TOKEN_RE: Regex = Regex::new(r"(^|[^\\])\$([A-Z][A-Z0-9]*)").unwrap();
 
+    // Markdown link with wikilink URL: [text]([[Page]]) -> [text](Page)
+    static ref MD_LINK_WIKILINK_RE: Regex = Regex::new(r"\[([^\]]+)\]\(\[\[([^\]]+)\]\]\)").unwrap();
+
     // Embed syntax
     static ref EMBED_RE: Regex = Regex::new(r"\{\{embed\s+\[\[([^\]]+)\]\]\s*\}\}").unwrap();
 
@@ -159,7 +162,10 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
     // Convert embeds
     result = EMBED_RE.replace_all(&result, "![[$1]]").to_string();
 
-    // Process wikilinks - remove pages/ prefix if present (pages are now at content root)
+    // Convert markdown links with wikilink URLs: [text]([[Page]]) -> [text](Page)
+    result = MD_LINK_WIKILINK_RE.replace_all(&result, "[$1]($2)").to_string();
+
+    // Process wikilinks - remove pages/ prefix and apply prefix matching for broken links
     result = WIKILINK_RE
         .replace_all(&result, |caps: &Captures| {
             let embed = caps.get(1).map_or("", |m| m.as_str());
@@ -173,7 +179,16 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
                 link
             };
 
-            format!("{}[[{}{}]]", embed, clean_link, alias)
+            // Try to find a matching page using prefix matching
+            // e.g., "visit us" should match "visit" if "visit" exists but "visit us" doesn't
+            let final_link = find_best_page_match(clean_link, page_index);
+
+            // If we found a different page and there's no alias, add the original as alias
+            if final_link != clean_link && alias.is_empty() {
+                format!("{}[[{}|{}]]", embed, final_link, clean_link)
+            } else {
+                format!("{}[[{}{}]]", embed, final_link, alias)
+            }
         })
         .to_string();
 
@@ -692,5 +707,55 @@ fn get_continuation_prefix(first_prefix: &str) -> String {
         result
     } else {
         first_prefix.to_string()
+    }
+}
+
+/// Find the best matching page for a wikilink using prefix matching
+/// e.g., "visit us" matches "visit" if "visit" exists but "visit us" doesn't
+fn find_best_page_match<'a>(link: &'a str, page_index: &[crate::page::Page]) -> &'a str {
+    let link_lower = link.to_lowercase();
+    let link_normalized = link_lower.replace(' ', "-").replace('_', "-");
+
+    // First check for exact match
+    for page in page_index {
+        let page_name = page.name.to_lowercase();
+        let page_normalized = page_name.replace(' ', "-").replace('_', "-");
+
+        if page_name == link_lower || page_normalized == link_normalized {
+            return link; // Exact match, return original
+        }
+    }
+
+    // No exact match - try prefix matching
+    // Find the longest matching page name that is a prefix of the link
+    let mut best_match: Option<&str> = None;
+    let mut best_len = 0;
+
+    let link_words = link_lower.replace('-', " ").replace('_', " ");
+
+    for page in page_index {
+        let page_name = page.name.to_lowercase();
+        let page_words = page_name.replace('-', " ").replace('_', " ");
+
+        // Check if link starts with page name followed by a space
+        if link_words.len() > page_words.len()
+            && link_words.starts_with(&page_words)
+            && link_words.chars().nth(page_words.len()) == Some(' ')
+        {
+            if page_words.len() > best_len {
+                best_len = page_words.len();
+                best_match = Some(&page.name);
+            }
+        }
+    }
+
+    // Return the best match (with original case from page_index) or original link
+    if let Some(matched) = best_match {
+        // We need to return a reference with the same lifetime as the input
+        // Since we're returning the matched page name, we leak a small string
+        // This is acceptable as the number of unique rewrites is bounded
+        Box::leak(matched.to_string().into_boxed_str())
+    } else {
+        link
     }
 }

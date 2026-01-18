@@ -855,4 +855,132 @@ mod table_and_pdf_tests {
             result
         );
     }
+
+    // ===========================================
+    // Wikilink Prefix Matching Tests
+    // ===========================================
+
+    fn create_page(name: &str) -> crate::page::Page {
+        crate::page::Page {
+            name: name.to_string(),
+            name_lower: name.to_lowercase(),
+            tags: vec![],
+            properties: std::collections::HashMap::new(),
+            content: String::new(),
+            namespace: None,
+            modified: None,
+            created: None,
+        }
+    }
+
+    #[test]
+    fn test_wikilink_prefix_match_visit_us_to_visit() {
+        // "visit us" should match "visit" page when "visit us" doesn't exist
+        let page_index = vec![create_page("visit"), create_page("other page")];
+        let input = "- Check out [[visit us]] for info";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[visit|visit us]]"),
+            "Should rewrite [[visit us]] to [[visit|visit us]], got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_wikilink_exact_match_not_rewritten() {
+        // Exact match should not be rewritten
+        let page_index = vec![create_page("visit"), create_page("visit us")];
+        let input = "- Check out [[visit us]] for info";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[visit us]]"),
+            "Exact match should not be rewritten, got: {}",
+            result
+        );
+        assert!(
+            !result.contains("[[visit|visit us]]"),
+            "Should not add alias for exact match, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_wikilink_prefix_match_preserves_existing_alias() {
+        // If link already has an alias, preserve it
+        let page_index = vec![create_page("visit")];
+        let input = "- Check out [[visit us|come see us]] for info";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[visit|come see us]]"),
+            "Should preserve existing alias when rewriting link, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_wikilink_prefix_match_longest_wins() {
+        // "cyber valley estate" should match "cyber valley" not "cyber"
+        let page_index = vec![
+            create_page("cyber"),
+            create_page("cyber valley"),
+            create_page("other"),
+        ];
+        let input = "- Visit [[cyber valley estate]] today";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[cyber valley|cyber valley estate]]"),
+            "Should match longest prefix 'cyber valley', got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_wikilink_no_match_unchanged() {
+        // No matching page - link should remain unchanged
+        let page_index = vec![create_page("other"), create_page("something")];
+        let input = "- Check out [[completely different]] for info";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[completely different]]"),
+            "Non-matching link should remain unchanged, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_wikilink_prefix_match_case_insensitive() {
+        // Matching should be case-insensitive
+        let page_index = vec![create_page("Visit")];
+        let input = "- Check out [[visit us]] for info";
+        let result = content::transform(input, &page_index);
+
+        assert!(
+            result.contains("[[Visit|visit us]]"),
+            "Prefix matching should be case-insensitive, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_markdown_link_with_wikilink_url() {
+        // Logseq syntax [text]([[Page]]) should convert to [text](Page)
+        let input = "- Check out [our tasks]([[Tasks]]) for examples";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("[our tasks](Tasks)"),
+            "Markdown link with wikilink URL should be converted, got: {}",
+            result
+        );
+        assert!(
+            !result.contains("[[Tasks]]"),
+            "Should not contain wikilink syntax in URL, got: {}",
+            result
+        );
+    }
 }

@@ -296,6 +296,18 @@ pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize>
                 let link_norm = link_lower.replace(' ', "-").replace('_', "-");
                 e_normalized == link_norm
             })
+            // Prefix matching: "visit us" matches "visit" if link starts with existing page + separator
+            || existing.iter().any(|e| {
+                let link_norm = link_lower.replace('-', " ").replace('_', " ");
+                let e_norm = e.replace('-', " ").replace('_', " ");
+                // Check if link starts with existing page name followed by a space
+                if link_norm.len() > e_norm.len() {
+                    link_norm.starts_with(&e_norm) &&
+                    link_norm.chars().nth(e_norm.len()) == Some(' ')
+                } else {
+                    false
+                }
+            })
         {
             continue;
         }

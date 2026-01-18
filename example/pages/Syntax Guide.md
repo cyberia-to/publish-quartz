@@ -15,6 +15,11 @@ alias:: Markdown Guide, Syntax Reference
 		- Simple link: [[Getting Started]]
 		- Link with alias: [[Getting Started|Home Page]]
 		- Link to non-existent page: [[Future Page]]
+	- ### Smart Prefix Matching
+		- Links like "page name extra words" automatically resolve to "page name" if that page exists.
+		- Example: [[Tasks management]] will link to [[Tasks]] page (displayed as "Tasks management")
+		- Example: [[Getting Started guide]] will link to [[Getting Started]] page
+		- This is useful when Logseq creates slightly different link text than the actual page name.
 	- ### External Links
 		- [Logseq Website](https://logseq.com)
 		- [GitHub](https://github.com/logseq/logseq)
