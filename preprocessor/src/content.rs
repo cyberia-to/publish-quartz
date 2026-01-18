@@ -170,17 +170,55 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
             // e.g., "visit us" should match "visit" if "visit" exists but "visit us" doesn't
             let final_link = find_best_page_match(clean_link, page_index);
 
-            // If we found a different page and there's no alias, add the original as alias
-            // Escape $ in display text to prevent LaTeX interpretation
-            if final_link != clean_link && alias.is_empty() {
-                let display_text = clean_link.replace('$', "\\$");
-                format!("{}[[{}|{}]]", embed, final_link, display_text)
-            } else if !alias.is_empty() {
-                // Existing alias - escape $ in it too
-                let escaped_alias = alias.replace('$', "\\$");
-                format!("{}[[{}{}]]", embed, final_link, escaped_alias)
+            // Handle embed syntax (!)
+            let is_embed = !embed.is_empty();
+
+            // Check if link or display contains $ - need special handling for KaTeX
+            // KaTeX sees $...$ as math mode, so [[$C|$TOCYB]] breaks because $C|$TOCYB
+            // is interpreted as math. Use raw HTML links for $ pages to prevent this.
+            let has_dollar = final_link.contains('$') || clean_link.contains('$') || alias.contains('$');
+
+            if has_dollar && !is_embed {
+                // Output raw HTML <a> tag instead of wikilink to prevent KaTeX interpretation
+                // KaTeX won't see $...$ patterns inside HTML tag attributes
+                let display = if !alias.is_empty() {
+                    // Remove leading | from alias
+                    alias.trim_start_matches('|').to_string()
+                } else if final_link != clean_link {
+                    clean_link.to_string()
+                } else {
+                    final_link.to_string()
+                };
+
+                let slug = final_link.to_lowercase();
+                let class = if !alias.is_empty() || final_link != clean_link {
+                    "internal alias"
+                } else {
+                    "internal"
+                };
+
+                format!(
+                    r#"<a href="{}" class="{}" data-slug="{}">{}</a>"#,
+                    final_link, class, slug, display
+                )
+            } else if is_embed {
+                // Embed syntax - keep as wikilink with $ (embeds are handled differently)
+                if final_link != clean_link && alias.is_empty() {
+                    format!("{}[[{}|{}]]", embed, final_link, clean_link)
+                } else if !alias.is_empty() {
+                    format!("{}[[{}{}]]", embed, final_link, alias)
+                } else {
+                    format!("{}[[{}]]", embed, final_link)
+                }
             } else {
-                format!("{}[[{}]]", embed, final_link)
+                // Regular wikilinks without $ - keep as wikilinks
+                if final_link != clean_link && alias.is_empty() {
+                    format!("[[{}|{}]]", final_link, clean_link)
+                } else if !alias.is_empty() {
+                    format!("[[{}{}]]", final_link, alias)
+                } else {
+                    format!("[[{}]]", final_link)
+                }
             }
         })
         .to_string();

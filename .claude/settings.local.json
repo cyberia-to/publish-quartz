@@ -17,7 +17,14 @@
       "Bash(ls:*)",
       "Bash(make check-node:*)",
       "Bash(echo:*)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(curl:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run watch:*)",
+      "Bash(gh api:*)",
+      "WebFetch(domain:cyberia-to.github.io)",
+      "Bash(gh workflow run:*)"
     ]
   }
 }

@@ -1176,66 +1176,76 @@ mod table_and_pdf_tests {
     }
 
     #[test]
-    fn test_wikilink_dollar_not_escaped() {
-        // Dollar signs inside wikilinks should NOT be escaped
-        // Page names like $BOOT.md need the wikilink to match exactly
+    fn test_wikilink_dollar_uses_html_anchor() {
+        // Dollar sign wikilinks output raw HTML <a> tags to prevent KaTeX
+        // from seeing $...$ as math mode (KaTeX runs before Quartz wikilink processing)
         let input = "- [[$BOOT]] is the token and [[$V]] is will";
         let result = content::transform(input, &empty_index());
 
         assert!(
-            result.contains("[[$BOOT]]") && result.contains("[[$V]]"),
-            "Dollar signs in wikilinks should NOT be escaped, got: {}",
+            result.contains(r#"<a href="$BOOT" class="internal" data-slug="$boot">$BOOT</a>"#),
+            "Dollar wikilinks should become HTML anchors, got: {}",
+            result
+        );
+        assert!(
+            result.contains(r#"<a href="$V" class="internal" data-slug="$v">$V</a>"#),
+            "Dollar wikilinks should become HTML anchors, got: {}",
             result
         );
     }
 
     #[test]
     fn test_dollar_token_outside_wikilink_escaped() {
-        // Dollar signs OUTSIDE wikilinks should be escaped
+        // Dollar signs OUTSIDE wikilinks should be backslash-escaped
+        // Dollar signs INSIDE wikilinks become HTML anchors
         let input = "- Use $BOOT for staking, see [[$BOOT]] for details";
         let result = content::transform(input, &empty_index());
 
         assert!(
-            result.contains("\\$BOOT for staking") && result.contains("[[$BOOT]]"),
-            "Dollar in text escaped, in wikilink not, got: {}",
+            result.contains("\\$BOOT for staking"),
+            "Dollar in text should be escaped with backslash, got: {}",
+            result
+        );
+        assert!(
+            result.contains(r#"<a href="$BOOT" class="internal" data-slug="$boot">$BOOT</a>"#),
+            "Dollar wikilink should become HTML anchor, got: {}",
             result
         );
     }
 
     #[test]
-    fn test_embed_wikilink_dollar_not_escaped() {
-        // Embed syntax ![[...]] should also preserve dollar signs
+    fn test_embed_wikilink_dollar_preserved() {
+        // Embed syntax ![[...]] keeps wikilink format with $ (embeds handled differently)
         let input = "- ![[Finalization of $BOOT distribution]]";
         let result = content::transform(input, &empty_index());
 
         assert!(
-            result.contains("$BOOT"),
-            "Dollar signs in embed wikilinks should NOT be escaped, got: {}",
+            result.contains("![[Finalization of $BOOT distribution]]"),
+            "Embed wikilinks with $ should keep wikilink syntax, got: {}",
             result
         );
     }
 
     #[test]
-    fn test_alias_dollar_sign_escaped_in_display() {
-        // When alias resolution creates [[Page|Display]], $ in Display should be escaped
-        // This prevents LaTeX from interpreting $Page|$Display as math
+    fn test_alias_dollar_uses_html_anchor() {
+        // When alias resolution creates [[Page|Display]] with $, output HTML anchor
         let page_index = vec![
             create_page_with_aliases("$C", vec!["$TOCYB"]),
         ];
         let input = "- [[$TOCYB]] is a token";
         let result = content::transform(input, &page_index);
 
-        // Should link to $C (unescaped) with display \$TOCYB (escaped)
+        // Should output HTML anchor to prevent KaTeX interpretation
         assert!(
-            result.contains("[[$C|\\$TOCYB]]"),
-            "Alias display text should have escaped $, got: {}",
+            result.contains(r#"<a href="$C" class="internal alias" data-slug="$c">$TOCYB</a>"#),
+            "Alias wikilink with $ should become HTML anchor, got: {}",
             result
         );
     }
 
     #[test]
-    fn test_simple_dollar_wikilink_not_escaped() {
-        // Simple wikilinks to $ pages should NOT be escaped
+    fn test_simple_dollar_wikilink_uses_html_anchor() {
+        // Simple wikilinks to $ pages use HTML anchor to prevent KaTeX
         let page_index = vec![
             create_page("$V"),
         ];
@@ -1243,8 +1253,8 @@ mod table_and_pdf_tests {
         let result = content::transform(input, &page_index);
 
         assert!(
-            result.contains("[[$V]]"),
-            "Simple $ wikilinks should not be escaped, got: {}",
+            result.contains(r#"<a href="$V" class="internal" data-slug="$v">$V</a>"#),
+            "Simple $ wikilinks should become HTML anchor, got: {}",
             result
         );
     }

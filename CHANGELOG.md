@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.3.10] - 2025-01-18
+
+### Fixed
+- Dollar sign wikilinks now render correctly without KaTeX math interpretation
+- `[[$C|$TOCYB]]` no longer shows red math error - displays as clickable `$TOCYB` link
+- Wikilinks with `$` output as raw HTML anchors to bypass KaTeX processing order issue
+
+### Changed
+- Dollar wikilinks (`[[$V]]`, `[[$C|$TOCYB]]`) now output `<a>` tags instead of `[[...]]` syntax
+- Stub extraction updated to handle both wikilink syntax and HTML anchors
+
 ## [0.3.9] - 2025-01-18
 
 ### Fixed

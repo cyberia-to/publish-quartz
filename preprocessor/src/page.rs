@@ -384,15 +384,29 @@ pub fn create_stubs(output_dir: &Path, _page_index: &PageIndex) -> Result<usize>
     Ok(created)
 }
 
-/// Extract wikilinks from content
+/// Extract wikilinks from content (both [[...]] syntax and HTML anchors)
 fn extract_wikilinks(content: &str, links: &mut HashSet<String>) {
     lazy_static::lazy_static! {
+        // Standard wikilink syntax
         static ref LINK_RE: Regex = Regex::new(r"\[\[([^\]|]+)(?:\|[^\]]+)?\]\]").unwrap();
+        // HTML anchor with data-slug attribute (used for $ pages to avoid KaTeX)
+        static ref HTML_LINK_RE: Regex = Regex::new(r#"<a\s+href="([^"]+)"\s+class="internal[^"]*""#).unwrap();
     }
 
+    // Extract from wikilink syntax
     for caps in LINK_RE.captures_iter(content) {
         let link = caps.get(1).unwrap().as_str().trim();
+        // Decode HTML entities back to original characters for stub matching
+        let link = link.replace("&#36;", "$");
         if !link.starts_with("http") && !link.starts_with('#') && !link.starts_with('!') {
+            links.insert(link.to_lowercase());
+        }
+    }
+
+    // Extract from HTML anchors (dollar sign pages)
+    for caps in HTML_LINK_RE.captures_iter(content) {
+        let link = caps.get(1).unwrap().as_str().trim();
+        if !link.starts_with("http") && !link.starts_with('#') {
             links.insert(link.to_lowercase());
         }
     }

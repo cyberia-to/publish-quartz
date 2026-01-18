@@ -99,16 +99,20 @@ make clean-content        # Remove content only (keep deps)
 
 ## Dollar Sign Handling
 
-Critical for LaTeX compatibility:
+Critical for LaTeX/KaTeX compatibility. KaTeX runs BEFORE Quartz wikilink processing, so `$...$` patterns get interpreted as math.
 
-| Context | Example | Behavior |
-|---------|---------|----------|
-| Simple wikilink | `[[$V]]` | NOT escaped (page matching) |
-| Alias wikilink | `[[$C\|$TOCYB]]` | Display text escaped |
+| Context | Example | Output |
+|---------|---------|--------|
+| Wikilink with $ | `[[$V]]` | `<a href="$V" class="internal">$V</a>` |
+| Alias wikilink | `[[$C\|$TOCYB]]` | `<a href="$C" class="internal alias">$TOCYB</a>` |
 | Currency in text | `$100`, `$10k` | Escaped `\$100` |
 | Token in text | `$BOOT` | Escaped `\$BOOT` |
+| Embed with $ | `![[page with $]]` | Kept as wikilink (embeds handled differently) |
 
-Implementation: `escape_dollars_outside_wikilinks()` uses placeholder strategy to protect wikilinks before escaping.
+Implementation:
+- **Wikilinks with $**: Output raw HTML `<a>` tags instead of `[[...]]` to prevent KaTeX from seeing `$...$` as math
+- **Text with $**: `escape_dollars_outside_wikilinks()` uses placeholder strategy to protect wikilinks, then escapes `$` with backslash
+- **Stub extraction**: `extract_wikilinks()` handles both `[[...]]` syntax and HTML anchors
 
 ## GitHub Actions & CI
 
@@ -132,27 +136,40 @@ Used by consumer repos (cyber, cvland) to build and deploy.
 
 ## Release Process
 
+### Pre-Release Checklist
+
+Before creating a release, verify:
+
+- [ ] **Tests pass**: Run `make test` - all tests must pass
+- [ ] **CHANGELOG.md updated**: Add entry for new version with changes
+- [ ] **README.md updated**: If new features need documentation
+- [ ] **CLAUDE.md updated**: Update "Recent Changes" section and any affected documentation
+
+### Release Steps
+
 ```bash
 # 1. Make changes to preprocessor/
 # 2. Run tests
 make test
 
-# 3. Commit (pre-commit hook runs tests)
+# 3. Update documentation (CHANGELOG.md, README.md if needed, CLAUDE.md)
+
+# 4. Commit (pre-commit hook runs tests)
 git add .
 git commit -m "Description"
 
-# 4. Push to main
+# 5. Push to main
 git push origin main
 
-# 5. Create and push tag
+# 6. Create and push tag
 git tag v0.3.X
 git push origin v0.3.X
 
-# 6. Update reusable workflow (in cyberia-to/.github)
+# 7. Update reusable workflow (in cyberia-to/.github)
 # Edit .github/workflows/publish-to-netlify.yml
 # Change: uses: cyberia-to/publish-quartz@v0.3.X
 
-# 7. Trigger consumer repos rebuild
+# 8. Trigger consumer repos rebuild
 cd ../cyber && git commit --allow-empty -m "Rebuild" && git push
 cd ../cvland && git commit --allow-empty -m "Rebuild" && git push
 ```
@@ -214,8 +231,9 @@ Check environment protection rules at:
 `Settings → Environments → github-pages → Deployment branches and tags`
 Must allow `v*` tags.
 
-## Recent Changes (v0.3.4 - v0.3.9)
+## Recent Changes (v0.3.4 - v0.3.10)
 
+- **v0.3.10**: Dollar wikilinks use HTML anchors to prevent KaTeX math interpretation
 - **v0.3.9**: CI tests, pre-commit hooks, wikilink alias $ escaping
 - **v0.3.8**: Wikilinks to $ pages fixed, placeholder strategy
 - **v0.3.7**: Currency escaping ($100, $10k, $7M)
