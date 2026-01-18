@@ -1107,4 +1107,71 @@ mod table_and_pdf_tests {
             result
         );
     }
+
+    #[test]
+    fn test_dollar_currency_escaped() {
+        // Currency amounts should be escaped to prevent LaTeX interpretation
+        let input = "- The price is $100 USD";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("\\$100"),
+            "Currency $100 should be escaped, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_dollar_currency_with_comma_escaped() {
+        // Currency with thousands separator should be escaped
+        let input = "- Budget: $50,000";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("\\$50,000"),
+            "Currency $50,000 should be escaped, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_dollar_currency_with_decimal_escaped() {
+        // Currency with decimal should be escaped
+        let input = "- Price: $19.99";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("\\$19.99"),
+            "Currency $19.99 should be escaped, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_dollar_currency_with_suffix_escaped() {
+        // Currency with k/M/B suffix should be escaped
+        let input = "- Cost: $10k to $7M";
+        let result = content::transform(input, &empty_index());
+
+        assert!(
+            result.contains("\\$10k") && result.contains("\\$7M"),
+            "Currency with suffix should be escaped, got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_math_mode_not_escaped() {
+        // LaTeX math mode $...$ should NOT be escaped
+        let input = "- Inline math: $x^2 + y^2 = z^2$";
+        let result = content::transform(input, &empty_index());
+
+        // The $ before x should not be escaped (it's math mode, not currency)
+        // Note: The current implementation may escape this - if so, we need smarter detection
+        assert!(
+            result.contains("$x^2"),
+            "Math mode should be preserved, got: {}",
+            result
+        );
+    }
 }

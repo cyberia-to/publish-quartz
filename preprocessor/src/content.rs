@@ -31,6 +31,9 @@ lazy_static! {
     // Standalone $ tokens (matches $TOKEN patterns)
     static ref DOLLAR_TOKEN_RE: Regex = Regex::new(r"(^|[^\\])\$([A-Z][A-Z0-9]*)").unwrap();
 
+    // Currency patterns like $100, $50,000, $1.99, $10k, $7M ($ followed by digits, optional suffix)
+    static ref DOLLAR_CURRENCY_RE: Regex = Regex::new(r"(^|[^\\])\$(\d[\d,.]*[kKmMbB]?)").unwrap();
+
     // Markdown link with wikilink URL: [text]([[Page]]) -> [text](Page)
     static ref MD_LINK_WIKILINK_RE: Regex = Regex::new(r"\[([^\]]+)\]\(\[\[([^\]]+)\]\]\)").unwrap();
 
@@ -156,6 +159,15 @@ pub fn transform(content: &str, page_index: &PageIndex) -> String {
             let prefix = &caps[1]; // char before $ or empty at start
             let token = &caps[2];  // the TOKEN part
             format!("{}\\${}", prefix, token)
+        })
+        .to_string();
+
+    // Escape currency patterns like $100, $50,000 (preserve char before $)
+    result = DOLLAR_CURRENCY_RE
+        .replace_all(&result, |caps: &Captures| {
+            let prefix = &caps[1];
+            let amount = &caps[2];
+            format!("{}\\${}", prefix, amount)
         })
         .to_string();
 
