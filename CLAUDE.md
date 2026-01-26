@@ -231,8 +231,9 @@ Check environment protection rules at:
 `Settings → Environments → github-pages → Deployment branches and tags`
 Must allow `v*` tags.
 
-## Recent Changes (v0.3.4 - v0.3.10)
+## Recent Changes (v0.3.4 - v0.3.11)
 
+- **v0.3.11**: Multi-site support: `--home`, `--title`, `--favorites`, `--site-name` CLI flags; whiteboard rendering
 - **v0.3.10**: Dollar wikilinks use HTML anchors to prevent KaTeX math interpretation
 - **v0.3.9**: CI tests, pre-commit hooks, wikilink alias $ escaping
 - **v0.3.8**: Wikilinks to $ pages fixed, placeholder strategy

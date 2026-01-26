@@ -18,16 +18,20 @@ lazy_static! {
     static ref SITE_TITLE_RE: Regex = Regex::new(r#":meta/title\s+"([^"]+)""#).unwrap();
 }
 
-/// Process favorites from logseq/config.edn
+/// Process favorites from logseq/config.edn or override list
 pub fn process_favorites(
     config_path: &Path,
     favorites_output: &Path,
     pages_output: &Path,
+    favorites_override: Option<&Vec<String>>,
 ) -> Result<usize> {
-    let content = fs::read_to_string(config_path)?;
-
-    // Extract favorites list
-    let favorites = extract_favorites(&content);
+    // Use override if provided, otherwise extract from config.edn
+    let favorites = if let Some(overrides) = favorites_override {
+        overrides.clone()
+    } else {
+        let content = fs::read_to_string(config_path)?;
+        extract_favorites(&content)
+    };
     if favorites.is_empty() {
         return Ok(0);
     }
@@ -163,16 +167,32 @@ pub fn get_site_title(config_path: &Path) -> Option<String> {
 pub struct SiteConfig {
     pub page_title: String,
     pub home_page: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub site_name: Option<String>,
 }
 
 /// Write site configuration to JSON file for Quartz config generation
-pub fn write_site_config(config_path: &Path, output_dir: &Path) -> Option<SiteConfig> {
-    let home_page = get_default_home(config_path).unwrap_or_else(|| "index".to_string());
-    let page_title = get_site_title(config_path).unwrap_or_else(|| home_page.clone());
+pub fn write_site_config(
+    config_path: &Path,
+    output_dir: &Path,
+    home_override: Option<&str>,
+    title_override: Option<&str>,
+    site_name_override: Option<&str>,
+) -> Option<SiteConfig> {
+    let home_page = home_override
+        .map(|s| s.to_string())
+        .or_else(|| get_default_home(config_path))
+        .unwrap_or_else(|| "index".to_string());
+
+    let page_title = title_override
+        .map(|s| s.to_string())
+        .or_else(|| get_site_title(config_path))
+        .unwrap_or_else(|| home_page.clone());
 
     let site_config = SiteConfig {
         page_title: capitalize_first(&page_title),
         home_page: home_page.clone(),
+        site_name: site_name_override.map(|s| s.to_string()),
     };
 
     // Write to JSON file

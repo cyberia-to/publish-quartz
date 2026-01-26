@@ -282,7 +282,7 @@ mod favorites_tests {
         fs::write(&config_path, config_content).unwrap();
 
         // Process favorites
-        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir);
+        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir, None);
         assert!(result.is_ok());
 
         // Check index.md format
@@ -319,7 +319,7 @@ mod favorites_tests {
         let config_path = temp.path().join("config.edn");
         fs::write(&config_path, config_content).unwrap();
 
-        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir);
+        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1, "Should create 1 favorite");
 
@@ -345,7 +345,7 @@ mod favorites_tests {
         let config_path = temp.path().join("config.edn");
         fs::write(&config_path, config_content).unwrap();
 
-        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir);
+        let result = crate::favorites::process_favorites(&config_path, &favorites_dir, &pages_dir, None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1, "Should create 1 favorite");
 
@@ -407,12 +407,13 @@ mod favorites_tests {
 
         fs::write(&config_path, r#"{:default-home {:page "cyberia"}}"#).unwrap();
 
-        let result = crate::favorites::write_site_config(&config_path, &output_dir);
+        let result = crate::favorites::write_site_config(&config_path, &output_dir, None, None, None);
         assert!(result.is_some());
 
         let config = result.unwrap();
         assert_eq!(config.page_title, "Cyberia"); // Capitalized
         assert_eq!(config.home_page, "cyberia");
+        assert!(config.site_name.is_none());
 
         // Check JSON file was created
         let json_path = output_dir.join("_site_config.json");
@@ -420,6 +421,121 @@ mod favorites_tests {
 
         let json_content = fs::read_to_string(json_path).unwrap();
         assert!(json_content.contains("Cyberia"));
+    }
+
+    #[test]
+    fn test_write_site_config_with_overrides() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        fs::write(&config_path, r#"{:default-home {:page "cyberia"}}"#).unwrap();
+
+        let result = crate::favorites::write_site_config(
+            &config_path,
+            &output_dir,
+            Some("custom-home"),
+            Some("Custom Title"),
+            Some("my site docs"),
+        );
+        assert!(result.is_some());
+
+        let config = result.unwrap();
+        assert_eq!(config.page_title, "Custom Title"); // Capitalized
+        assert_eq!(config.home_page, "custom-home");
+        assert_eq!(config.site_name, Some("my site docs".to_string()));
+
+        // Check JSON file
+        let json_content = fs::read_to_string(output_dir.join("_site_config.json")).unwrap();
+        assert!(json_content.contains("Custom Title"));
+        assert!(json_content.contains("custom-home"));
+        assert!(json_content.contains("my site docs"));
+    }
+
+    #[test]
+    fn test_write_site_config_home_override_only() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        fs::write(&config_path, r#"{:default-home {:page "cyberia"} :meta/title "Original"}"#).unwrap();
+
+        let result = crate::favorites::write_site_config(
+            &config_path,
+            &output_dir,
+            Some("new-home"),
+            None,
+            None,
+        );
+        assert!(result.is_some());
+
+        let config = result.unwrap();
+        assert_eq!(config.home_page, "new-home");
+        // Title should come from config.edn since no title override
+        assert_eq!(config.page_title, "Original");
+    }
+
+    #[test]
+    fn test_process_favorites_with_override() {
+        let temp = tempdir().unwrap();
+        let favorites_dir = temp.path().join("favorites");
+        let pages_dir = temp.path().join("pages");
+        fs::create_dir_all(&favorites_dir).unwrap();
+        fs::create_dir_all(&pages_dir).unwrap();
+
+        // Create test pages
+        fs::write(
+            pages_dir.join("page-a.md"),
+            "---\ntitle: Page A\n---\nContent A",
+        ).unwrap();
+        fs::write(
+            pages_dir.join("page-b.md"),
+            "---\ntitle: Page B\n---\nContent B",
+        ).unwrap();
+
+        // Config has different favorites than override
+        let config_content = r#"{:favorites ["page-a"]}"#;
+        let config_path = temp.path().join("config.edn");
+        fs::write(&config_path, config_content).unwrap();
+
+        // Override with both pages
+        let override_favs = vec!["page-a".to_string(), "page-b".to_string()];
+        let result = crate::favorites::process_favorites(
+            &config_path,
+            &favorites_dir,
+            &pages_dir,
+            Some(&override_favs),
+        );
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2, "Should create 2 favorites from override");
+
+        // Check index.md contains both
+        let index_content = fs::read_to_string(favorites_dir.join("index.md")).unwrap();
+        assert!(index_content.contains("page-a"), "Should contain page-a");
+        assert!(index_content.contains("page-b"), "Should contain page-b");
+    }
+
+    #[test]
+    fn test_write_site_config_site_name_in_json() {
+        let temp = tempdir().unwrap();
+        let config_path = temp.path().join("config.edn");
+        let output_dir = temp.path().join("output");
+        fs::create_dir_all(&output_dir).unwrap();
+
+        fs::write(&config_path, r#"{:default-home {:page "test"}}"#).unwrap();
+
+        // Without site_name - should not appear in JSON
+        let _result = crate::favorites::write_site_config(&config_path, &output_dir, None, None, None);
+        let json = fs::read_to_string(output_dir.join("_site_config.json")).unwrap();
+        assert!(!json.contains("site_name"), "site_name should not appear when not set, got: {}", json);
+
+        // With site_name - should appear in JSON
+        let result = crate::favorites::write_site_config(&config_path, &output_dir, None, None, Some("cyber docs"));
+        assert!(result.is_some());
+        let json = fs::read_to_string(output_dir.join("_site_config.json")).unwrap();
+        assert!(json.contains("cyber docs"), "site_name should appear in JSON, got: {}", json);
     }
 }
 
@@ -449,6 +565,7 @@ mod journals_tests {
             include_private: false,
             create_stubs: false,
             verbose: false,
+            ..Default::default()
         };
 
         let page_index = Vec::new();
@@ -489,6 +606,7 @@ mod journals_tests {
             include_private: false,
             create_stubs: false,
             verbose: false,
+            ..Default::default()
         };
 
         let page_index = Vec::new();

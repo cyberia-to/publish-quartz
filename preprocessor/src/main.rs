@@ -39,11 +39,31 @@ struct Cli {
     /// Verbose output
     #[arg(short, long)]
     verbose: bool,
+
+    /// Override default home page (from config.edn :default-home)
+    #[arg(long)]
+    home: Option<String>,
+
+    /// Override site title (from config.edn :meta/title)
+    #[arg(long)]
+    title: Option<String>,
+
+    /// Comma-separated favorites list (overrides config.edn :favorites)
+    #[arg(long)]
+    favorites: Option<String>,
+
+    /// Site name for meta tags (written to _site_config.json)
+    #[arg(long)]
+    site_name: Option<String>,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let start = Instant::now();
+
+    let favorites_override = cli.favorites.map(|f| {
+        f.split(',').map(|s| s.trim().to_string()).collect::<Vec<_>>()
+    });
 
     let config = Config {
         input_dir: cli.input,
@@ -51,6 +71,10 @@ fn main() -> Result<()> {
         include_private: cli.include_private,
         create_stubs: cli.create_stubs,
         verbose: cli.verbose,
+        home_override: cli.home,
+        title_override: cli.title,
+        favorites_override,
+        site_name_override: cli.site_name,
     };
 
     println!("Preprocessing Logseq content for Quartz...\n");
@@ -155,13 +179,24 @@ fn run_preprocessor(config: &Config) -> Result<Stats> {
     // Step 5: Process favorites
     println!("\nProcessing favorites...");
     let config_path = config.input_dir.join("logseq/config.edn");
-    if config_path.exists() {
-        stats.favorites_created = favorites::process_favorites(&config_path, &favorites_output, &pages_output)?;
+    if config_path.exists() || config.favorites_override.is_some() {
+        stats.favorites_created = favorites::process_favorites(
+            &config_path,
+            &favorites_output,
+            &pages_output,
+            config.favorites_override.as_ref(),
+        )?;
         println!("Created: {} favorite pages", stats.favorites_created);
     }
 
     // Step 6: Write site config and create index.md by copying home page
-    let site_config = favorites::write_site_config(&config_path, &config.output_dir);
+    let site_config = favorites::write_site_config(
+        &config_path,
+        &config.output_dir,
+        config.home_override.as_deref(),
+        config.title_override.as_deref(),
+        config.site_name_override.as_deref(),
+    );
     let index_path = config.output_dir.join("index.md");
     if !index_path.exists() {
         let home_page = match &site_config {

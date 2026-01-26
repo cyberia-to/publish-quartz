@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.11] - 2025-01-26
+
+### Added
+- CLI flags `--home`, `--title`, `--favorites`, `--site-name` for multi-site support
+- Single Logseq graph can now build multiple sites with different configurations
+- `site_name` field in `_site_config.json` for meta tag customization
+- GitHub Action inputs for all new CLI flags
+- Whiteboard rendering support
+
+### Changed
+- `process_favorites()` accepts optional favorites override list
+- `write_site_config()` accepts optional home, title, and site-name overrides
+
 ## [0.3.10] - 2025-01-18
 
 ### Fixed
