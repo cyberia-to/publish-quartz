@@ -24,7 +24,18 @@
       "Bash(gh run watch:*)",
       "Bash(gh api:*)",
       "WebFetch(domain:cyberia-to.github.io)",
-      "Bash(gh workflow run:*)"
+      "Bash(gh workflow run:*)",
+      "Bash(/dev/null -exec head -20 {} ;)",
+      "Bash(/Users/michaelborisov/Develop/publish-quartz/preprocessor/target/release/logseq-to-quartz:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd multi-site inputs and update to publish-quartz v0.3.11\n\nAdd home, title, favorites inputs to reusable workflow and pass\nthem through to the publish-quartz action for multi-site builds.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(git stash:*)",
+      "Bash(git pull:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nUnified two-site build with GitHub Environments\n\nBuild both cyber.page and cv.land from this single repo using\nseparate GitHub Environments for secrets. Both jobs run in parallel.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(gh run rerun:*)",
+      "WebSearch",
+      "Bash(git commit:*)"
     ]
   }
 }
